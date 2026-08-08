@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/*
+ * Brand tokens. Defaults below are PLACEHOLDERS (see docs/brand-audit.md —
+ * not confirmed Camp Coleman brand colors). Overridden at runtime per
+ * organization via inline CSS variables set in the root layout from
+ * OrganizationBrand — see src/app/layout.tsx.
+ */
+:root {
+  --background: #f4f5f3;
+  --foreground: #1a1a1a;
+  --brand-primary: #1e3e32; /* placeholder "forest" */
+  --brand-secondary: #121e33; /* placeholder "navy" */
+  --brand-accent: #e06a3e; /* placeholder "coral" */
+  --brand-surface: #ffffff;
+  --brand-muted: #5b6570;
+  --brand-hairline: #dde1de;
+  /* Placeholder system-font stack pending a real Camp Coleman brand font (docs/brand-audit.md). */
+  --font-app-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-hairline: var(--brand-hairline);
+  --font-sans: var(--font-app-sans);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-app-sans, ui-sans-serif, system-ui, sans-serif);
+}
+
+/* Visible focus rings everywhere — accessibility baseline (spec Section 21). */
+:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

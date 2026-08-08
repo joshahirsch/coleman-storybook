@@ -1,0 +1,64 @@
+import { z } from "zod";
+
+export const relationshipValues = [
+  "camper",
+  "staff",
+  "camper_staff",
+  "parent",
+  "alumni_parent",
+  "volunteer",
+  "other",
+] as const;
+
+export const contributorIdentitySchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required").max(100),
+  lastName: z.string().trim().min(1, "Last name is required").max(100),
+  email: z.string().trim().email("Enter a valid email").max(255).optional().or(z.literal("")),
+  relationship: z.enum(relationshipValues),
+  yearsAssociated: z.string().trim().max(100).optional().or(z.literal("")),
+  roleInfo: z.string().trim().max(500).optional().or(z.literal("")),
+  isAdult: z.literal(true, "Coleman Storybook is currently open to adult contributors only."),
+});
+export type ContributorIdentityInput = z.infer<typeof contributorIdentitySchema>;
+
+export const consentAcceptanceSchema = z.object({
+  submissionId: z.string().uuid(),
+  consentVersion: z.string().min(1),
+  permittedUseClassification: z.string().min(1),
+  accepted: z.literal(true, "Consent must be accepted to continue."),
+});
+export type ConsentAcceptanceInput = z.infer<typeof consentAcceptanceSchema>;
+
+export const uploadInitSchema = z.object({
+  submissionAnswerId: z.string().uuid(),
+  mimeType: z.enum(["video/webm", "video/mp4", "audio/webm", "audio/mp4"]),
+  estimatedBytes: z.number().int().positive().max(500 * 1024 * 1024), // 500MB hard cap
+});
+export type UploadInitInput = z.infer<typeof uploadInitSchema>;
+
+export const uploadConfirmSchema = z.object({
+  submissionAnswerId: z.string().uuid(),
+  storageKey: z.string().min(1),
+});
+export type UploadConfirmInput = z.infer<typeof uploadConfirmSchema>;
+
+export const adminLoginSchema = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(1),
+});
+export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
+
+export const adminReviewUpdateSchema = z.object({
+  submissionId: z.string().uuid(),
+  editorialState: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+  notes: z.string().max(5000).optional(),
+  favorite: z.boolean().optional(),
+});
+export type AdminReviewUpdateInput = z.infer<typeof adminReviewUpdateSchema>;
+
+/** Server-side enforced constraints, independent of anything the client sends. */
+export const MEDIA_CONSTRAINTS = {
+  allowedMimeTypes: ["video/webm", "video/mp4", "audio/webm", "audio/mp4"] as const,
+  maxBytes: 500 * 1024 * 1024,
+  maxDurationSecondsHardCap: 600,
+};

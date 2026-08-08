@@ -1,0 +1,741 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  beginUploadAction,
+  finalizeSubmissionAction,
+  startSubmissionAction,
+  submitConsentAction,
+} from "@/lib/actions/public-actions";
+import { uploadWithProgress } from "@/lib/upload-client";
+import { PERMITTED_USE_CLASSIFICATIONS, type PermittedUseClassification } from "@/lib/consent";
+
+type Relationship = "camper" | "staff" | "camper_staff" | "parent" | "alumni_parent" | "volunteer" | "other";
+
+const RELATIONSHIP_OPTIONS: { value: Relationship; label: string }[] = [
+  { value: "alumni_parent", label: "Alumni (former camper)" },
+  { value: "staff", label: "Staff (current or former)" },
+  { value: "camper_staff", label: "Camper and staff" },
+  { value: "parent", label: "Parent" },
+  { value: "volunteer", label: "Volunteer" },
+  { value: "other", label: "Other Coleman community member" },
+];
+
+interface AnswerPrompt {
+  id: string;
+  prompt: string;
+  helpText: string | null;
+  order: number;
+}
+
+interface AnswerRecording {
+  blob: Blob | null;
+  approved: boolean;
+  storageKey: string | null;
+  uploadProgress: number; // 0..1
+  uploadState: "idle" | "uploading" | "confirming" | "done" | "error";
+  uploadError: string | null;
+}
+
+type Step =
+  | "identity"
+  | "consent"
+  | "permissions"
+  | "record"
+  | "uploading"
+  | "complete"
+  | "unrecoverable-error";
+
+const MAX_RETRY_ATTEMPTS = 2;
+
+export function ContributorFlow({
+  campaignSlug,
+  campaignTitle,
+  completionHeadline,
+  completionCopy,
+}: {
+  campaignSlug: string;
+  campaignTitle: string;
+  completionHeadline: string | null;
+  completionCopy: string | null;
+}) {
+  const [step, setStep] = useState<Step>("identity");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Identity form state
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [relationship, setRelationship] = useState<Relationship>("alumni_parent");
+  const [yearsAssociated, setYearsAssociated] = useState("");
+  const [isAdultConfirmed, setIsAdultConfirmed] = useState(false);
+
+  // Submission state (populated once identity step succeeds)
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [consentVersion, setConsentVersion] = useState<string | null>(null);
+  const [consentText, setConsentText] = useState<string | null>(null);
+  const [maxDurationSeconds, setMaxDurationSeconds] = useState(180);
+  const [answers, setAnswers] = useState<AnswerPrompt[]>([]);
+  const [recordings, setRecordings] = useState<Record<string, AnswerRecording>>({});
+
+  // Consent step state
+  const [permittedUse, setPermittedUse] = useState<PermittedUseClassification>("full_permitted_use");
+  const [consentAccepted, setConsentAccepted] = useState(false);
+
+  // Camera/mic state
+  const [permissionState, setPermissionState] = useState<"idle" | "requesting" | "granted" | "denied" | "error">(
+    "idle",
+  );
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+
+  // Recording step state
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "recorded">("idle");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [reviewUrl, setReviewUrl] = useState<string | null>(null);
+
+  // Upload step state
+  const [uploadOverallError, setUploadOverallError] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+
+  const currentQuestion = answers[currentQuestionIndex] as AnswerPrompt | undefined;
+
+  // Warn before accidental navigation once recording/uploading has started.
+  useEffect(() => {
+    const shouldWarn = step === "record" || step === "uploading";
+    if (!shouldWarn) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [step]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (reviewUrl) URL.revokeObjectURL(reviewUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleIdentitySubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!isAdultConfirmed) {
+      setFormError("Coleman Storybook is currently open to adult contributors only.");
+      return;
+    }
+    if (!firstName.trim() || !lastName.trim()) {
+      setFormError("Please enter your first and last name.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const result = await startSubmissionAction(campaignSlug, {
+        firstName,
+        lastName,
+        email,
+        relationship,
+        yearsAssociated,
+        roleInfo: "",
+        isAdult: true,
+      });
+      if (!result.ok || !result.submissionId) {
+        setFormError(result.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      setSubmissionId(result.submissionId);
+      setConsentVersion(result.consentVersion ?? null);
+      setConsentText(result.consentText ?? null);
+      setMaxDurationSeconds(result.maxDurationSeconds ?? 180);
+      setAnswers(result.answers ?? []);
+      const initialRecordings: Record<string, AnswerRecording> = {};
+      for (const a of result.answers ?? []) {
+        initialRecordings[a.id] = {
+          blob: null,
+          approved: false,
+          storageKey: null,
+          uploadProgress: 0,
+          uploadState: "idle",
+          uploadError: null,
+        };
+      }
+      setRecordings(initialRecordings);
+      setStep("consent");
+    } catch {
+      setFormError("Network error — please check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleConsentSubmit() {
+    setFormError(null);
+    if (!consentAccepted || !submissionId || !consentVersion) {
+      setFormError("Please review and accept the consent statement to continue.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = await submitConsentAction({
+        submissionId,
+        consentVersion,
+        permittedUseClassification: permittedUse,
+        accepted: true,
+      });
+      if (!result.ok) {
+        setFormError(result.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      setStep("permissions");
+    } catch {
+      setFormError("Network error — please check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function requestPermissions() {
+    setPermissionState("requesting");
+    setPermissionError(null);
+
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setPermissionState("error");
+      setPermissionError(
+        "Your browser doesn't support camera/microphone recording. Please try a recent version of Chrome or Safari.",
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: true,
+      });
+      streamRef.current = stream;
+      setPermissionState("granted");
+      if (videoPreviewRef.current) {
+        videoPreviewRef.current.srcObject = stream;
+        await videoPreviewRef.current.play().catch(() => {});
+      }
+    } catch (err) {
+      setPermissionState("denied");
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        setPermissionError(
+          "Camera/microphone access was denied. Please allow access in your browser settings and try again.",
+        );
+      } else if (err instanceof DOMException && err.name === "NotFoundError") {
+        setPermissionError("No camera or microphone was found on this device.");
+      } else {
+        setPermissionError("Couldn't access your camera/microphone. Please check your device and try again.");
+      }
+    }
+  }
+
+  function proceedToRecording() {
+    if (permissionState !== "granted") return;
+    setStep("record");
+  }
+
+  function pickMimeType(): string {
+    const candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+    for (const c of candidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(c)) return c;
+    }
+    return "video/webm";
+  }
+
+  function startRecording() {
+    if (!streamRef.current) return;
+    chunksRef.current = [];
+    const mimeType = pickMimeType();
+    const recorder = new MediaRecorder(streamRef.current, { mimeType });
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: mimeType.split(";")[0] });
+      const url = URL.createObjectURL(blob);
+      setReviewUrl(url);
+      if (currentQuestion) {
+        setRecordings((prev) => ({
+          ...prev,
+          [currentQuestion.id]: { ...prev[currentQuestion.id], blob, approved: false },
+        }));
+      }
+      setRecordingState("recorded");
+    };
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setRecordingState("recording");
+    setElapsedSeconds(0);
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds((prev) => {
+        const next = prev + 1;
+        if (next >= maxDurationSeconds) {
+          stopRecording();
+        }
+        return next;
+      });
+    }, 1000);
+  }
+
+  function stopRecording() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    mediaRecorderRef.current?.stop();
+  }
+
+  function retakeRecording() {
+    if (reviewUrl) URL.revokeObjectURL(reviewUrl);
+    setReviewUrl(null);
+    setRecordingState("idle");
+    setElapsedSeconds(0);
+    if (currentQuestion) {
+      setRecordings((prev) => ({
+        ...prev,
+        [currentQuestion.id]: { ...prev[currentQuestion.id], blob: null, approved: false },
+      }));
+    }
+  }
+
+  function approveAndContinue() {
+    if (!currentQuestion) return;
+    setRecordings((prev) => ({
+      ...prev,
+      [currentQuestion.id]: { ...prev[currentQuestion.id], approved: true },
+    }));
+    if (reviewUrl) URL.revokeObjectURL(reviewUrl);
+    setReviewUrl(null);
+    setRecordingState("idle");
+    setElapsedSeconds(0);
+
+    if (currentQuestionIndex + 1 < answers.length) {
+      setCurrentQuestionIndex((i) => i + 1);
+    } else {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      void beginUploads();
+    }
+  }
+
+  async function beginUploads() {
+    if (!submissionId) return;
+    setStep("uploading");
+    setUploadOverallError(null);
+
+    const beginResult = await beginUploadAction(submissionId);
+    if (!beginResult.ok) {
+      setUploadOverallError(beginResult.error ?? "Couldn't start upload. Please try again.");
+      return;
+    }
+
+    for (const answer of answers) {
+      const recording = recordings[answer.id];
+      if (!recording?.blob) continue;
+      await uploadOneAnswer(answer.id, recording.blob);
+    }
+
+    const allDone = answers.every((a) => recordings[a.id]?.uploadState === "done");
+    if (!allDone) {
+      // Individual failures are shown inline per-question; overall retry is available below.
+      return;
+    }
+
+    setFinalizing(true);
+    const finalize = await finalizeSubmissionAction(submissionId);
+    setFinalizing(false);
+    if (!finalize.ok) {
+      setUploadOverallError(finalize.error ?? "Couldn't finish submitting. Please try again.");
+      return;
+    }
+    setStep("complete");
+  }
+
+  async function uploadOneAnswer(answerId: string, blob: Blob, attempt = 0): Promise<void> {
+    setRecordings((prev) => ({
+      ...prev,
+      [answerId]: { ...prev[answerId], uploadState: "uploading", uploadProgress: 0, uploadError: null },
+    }));
+
+    try {
+      const initRes = await fetch("/api/uploads/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionAnswerId: answerId,
+          mimeType: blob.type || "video/webm",
+          estimatedBytes: blob.size,
+        }),
+      });
+      const initData = await initRes.json();
+      if (!initRes.ok || !initData.ok) {
+        throw new Error(initData.error ?? "Couldn't prepare upload.");
+      }
+
+      const putResult = await uploadWithProgress(initData.uploadUrl, initData.method, initData.headers, blob, (frac) => {
+        setRecordings((prev) => ({ ...prev, [answerId]: { ...prev[answerId], uploadProgress: frac } }));
+      });
+      if (!putResult.ok) {
+        throw new Error("Upload failed. Please check your connection.");
+      }
+
+      setRecordings((prev) => ({ ...prev, [answerId]: { ...prev[answerId], uploadState: "confirming" } }));
+      const confirmRes = await fetch("/api/uploads/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionAnswerId: answerId, storageKey: initData.storageKey }),
+      });
+      const confirmData = await confirmRes.json();
+      if (!confirmRes.ok || !confirmData.ok) {
+        throw new Error(confirmData.error ?? "Upload could not be confirmed.");
+      }
+
+      setRecordings((prev) => ({
+        ...prev,
+        [answerId]: { ...prev[answerId], uploadState: "done", uploadProgress: 1, storageKey: initData.storageKey },
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed.";
+      if (attempt < MAX_RETRY_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        return uploadOneAnswer(answerId, blob, attempt + 1);
+      }
+      setRecordings((prev) => ({
+        ...prev,
+        [answerId]: { ...prev[answerId], uploadState: "error", uploadError: message },
+      }));
+    }
+  }
+
+  async function retryFailedUploads() {
+    setUploadOverallError(null);
+    for (const answer of answers) {
+      const recording = recordings[answer.id];
+      if (recording?.uploadState === "error" && recording.blob) {
+        await uploadOneAnswer(answer.id, recording.blob);
+      }
+    }
+    const allDone = answers.every((a) => recordings[a.id]?.uploadState === "done");
+    if (allDone && submissionId) {
+      setFinalizing(true);
+      const finalize = await finalizeSubmissionAction(submissionId);
+      setFinalizing(false);
+      if (finalize.ok) {
+        setStep("complete");
+      } else {
+        setUploadOverallError(finalize.error ?? "Couldn't finish submitting. Please try again.");
+      }
+    }
+  }
+
+  const progressLabel = useMemo(() => {
+    const stepOrder: Step[] = ["identity", "consent", "permissions", "record", "uploading", "complete"];
+    const idx = stepOrder.indexOf(step);
+    return `Step ${Math.max(idx, 0) + 1} of ${stepOrder.length}`;
+  }, [step]);
+
+  return (
+    <div>
+      <p className="mb-6 text-center text-xs font-medium uppercase tracking-wide text-brand-muted" aria-live="polite">
+        {campaignTitle} — {progressLabel}
+      </p>
+
+      {step === "identity" && (
+        <form onSubmit={handleIdentitySubmit} className="flex flex-col gap-4" noValidate>
+          <h1 className="text-2xl font-semibold text-brand-secondary">Tell us a bit about you</h1>
+          <div className="flex gap-3">
+            <label className="flex-1 text-sm font-medium text-brand-secondary">
+              First name
+              <input
+                className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-base"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                autoComplete="given-name"
+                required
+              />
+            </label>
+            <label className="flex-1 text-sm font-medium text-brand-secondary">
+              Last name
+              <input
+                className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-base"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                autoComplete="family-name"
+                required
+              />
+            </label>
+          </div>
+          <label className="text-sm font-medium text-brand-secondary">
+            Email (optional)
+            <input
+              type="email"
+              className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-base"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </label>
+          <label className="text-sm font-medium text-brand-secondary">
+            Your relationship to Coleman
+            <select
+              className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-base"
+              value={relationship}
+              onChange={(e) => setRelationship(e.target.value as Relationship)}
+            >
+              {RELATIONSHIP_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-medium text-brand-secondary">
+            Years associated with Coleman (optional)
+            <input
+              className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-base"
+              placeholder="e.g. 1998–2005"
+              value={yearsAssociated}
+              onChange={(e) => setYearsAssociated(e.target.value)}
+            />
+          </label>
+          <label className="flex items-start gap-2 text-sm text-brand-secondary">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={isAdultConfirmed}
+              onChange={(e) => setIsAdultConfirmed(e.target.checked)}
+            />
+            I confirm that I am an adult (18 or older). Coleman Storybook is currently open to adult contributors
+            only.
+          </label>
+
+          {formError && (
+            <p role="alert" className="text-sm font-medium text-red-700">
+              {formError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="mt-2 rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {submitting ? "Please wait…" : "Continue"}
+          </button>
+        </form>
+      )}
+
+      {step === "consent" && (
+        <div className="flex flex-col gap-4">
+          <h1 className="text-2xl font-semibold text-brand-secondary">Before you record</h1>
+          <div className="max-h-64 overflow-y-auto rounded-md border border-brand-hairline bg-brand-surface p-4 text-sm text-brand-muted whitespace-pre-wrap">
+            {consentText}
+          </div>
+          <fieldset>
+            <legend className="text-sm font-medium text-brand-secondary">How may we use your story?</legend>
+            <div className="mt-2 flex flex-col gap-2">
+              {PERMITTED_USE_CLASSIFICATIONS.map((opt) => (
+                <label key={opt.value} className="flex items-center gap-2 text-sm text-brand-secondary">
+                  <input
+                    type="radio"
+                    name="permittedUse"
+                    value={opt.value}
+                    checked={permittedUse === opt.value}
+                    onChange={() => setPermittedUse(opt.value)}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="flex items-start gap-2 text-sm text-brand-secondary">
+            <input type="checkbox" className="mt-1" checked={consentAccepted} onChange={(e) => setConsentAccepted(e.target.checked)} />
+            I have read and agree to the statement above.
+          </label>
+          {formError && (
+            <p role="alert" className="text-sm font-medium text-red-700">
+              {formError}
+            </p>
+          )}
+          <button
+            onClick={handleConsentSubmit}
+            disabled={submitting}
+            className="rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {submitting ? "Please wait…" : "I agree, continue"}
+          </button>
+        </div>
+      )}
+
+      {step === "permissions" && (
+        <div className="flex flex-col gap-4">
+          <h1 className="text-2xl font-semibold text-brand-secondary">Get ready to record</h1>
+          <ul className="list-disc pl-5 text-sm text-brand-muted">
+            <li>Find a reasonably quiet place.</li>
+            <li>Face a light source rather than having it behind you.</li>
+            <li>Place your camera near eye level.</li>
+            <li>Speak naturally — take your time.</li>
+          </ul>
+
+          <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
+            <video ref={videoPreviewRef} className="h-full w-full object-cover" muted playsInline />
+          </div>
+
+          {permissionState !== "granted" && (
+            <button
+              onClick={requestPermissions}
+              disabled={permissionState === "requesting"}
+              className="rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {permissionState === "requesting" ? "Requesting access…" : "Allow camera & microphone"}
+            </button>
+          )}
+
+          {permissionError && (
+            <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              {permissionError}
+              <button onClick={requestPermissions} className="ml-2 underline">
+                Try again
+              </button>
+            </div>
+          )}
+
+          {permissionState === "granted" && (
+            <button
+              onClick={proceedToRecording}
+              className="rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90"
+            >
+              Continue
+            </button>
+          )}
+        </div>
+      )}
+
+      {step === "record" && currentQuestion && (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-brand-muted">
+            Question {currentQuestionIndex + 1} of {answers.length}
+          </p>
+          <h1 className="text-2xl font-semibold text-brand-secondary">{currentQuestion.prompt}</h1>
+          {currentQuestion.helpText && <p className="text-sm text-brand-muted">{currentQuestion.helpText}</p>}
+
+          <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
+            {recordingState === "recorded" && reviewUrl ? (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <video src={reviewUrl} className="h-full w-full object-cover" controls playsInline />
+            ) : (
+              <video ref={videoPreviewRef} className="h-full w-full object-cover" muted playsInline />
+            )}
+          </div>
+
+          <p aria-live="polite" className="text-sm font-medium text-brand-secondary">
+            {recordingState === "recording"
+              ? `Recording… ${elapsedSeconds}s / ${maxDurationSeconds}s`
+              : recordingState === "recorded"
+                ? "Review your answer below."
+                : "Ready to record."}
+          </p>
+
+          <div className="flex gap-3">
+            {recordingState === "idle" && (
+              <button
+                onClick={startRecording}
+                className="flex-1 rounded-full bg-brand-accent px-6 py-3 font-medium text-white transition hover:opacity-90"
+              >
+                Start recording
+              </button>
+            )}
+            {recordingState === "recording" && (
+              <button
+                onClick={stopRecording}
+                className="flex-1 rounded-full bg-brand-secondary px-6 py-3 font-medium text-white transition hover:opacity-90"
+              >
+                Stop
+              </button>
+            )}
+            {recordingState === "recorded" && (
+              <>
+                <button
+                  onClick={retakeRecording}
+                  className="flex-1 rounded-full border border-brand-hairline px-6 py-3 font-medium text-brand-secondary transition hover:bg-brand-surface"
+                >
+                  Retake
+                </button>
+                <button
+                  onClick={approveAndContinue}
+                  className="flex-1 rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90"
+                >
+                  {currentQuestionIndex + 1 < answers.length ? "Approve & next question" : "Approve & continue"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {step === "uploading" && (
+        <div className="flex flex-col gap-4">
+          <h1 className="text-2xl font-semibold text-brand-secondary">Uploading your story…</h1>
+          <p className="text-sm text-brand-muted">
+            Please stay on this page until this finishes. This can take a few minutes on slower connections.
+          </p>
+          <ul className="flex flex-col gap-3">
+            {answers.map((a, i) => {
+              const r = recordings[a.id];
+              return (
+                <li key={a.id} className="rounded-md border border-brand-hairline p-3">
+                  <p className="text-sm font-medium text-brand-secondary">
+                    Question {i + 1}: {r?.uploadState === "done" ? "Uploaded ✓" : r?.uploadState === "error" ? "Failed" : "Uploading…"}
+                  </p>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-brand-hairline">
+                    <div
+                      className="h-full bg-brand-primary transition-all"
+                      style={{ width: `${Math.round((r?.uploadProgress ?? 0) * 100)}%` }}
+                    />
+                  </div>
+                  {r?.uploadError && <p className="mt-1 text-xs text-red-700">{r.uploadError}</p>}
+                </li>
+              );
+            })}
+          </ul>
+          {finalizing && <p className="text-sm text-brand-muted">Finishing up…</p>}
+          {uploadOverallError && (
+            <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              {uploadOverallError}
+            </div>
+          )}
+          {answers.some((a) => recordings[a.id]?.uploadState === "error") && (
+            <button
+              onClick={retryFailedUploads}
+              className="rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90"
+            >
+              Retry failed upload(s)
+            </button>
+          )}
+        </div>
+      )}
+
+      {step === "complete" && (
+        <div className="flex flex-col items-center gap-4 text-center">
+          <h1 className="text-2xl font-semibold text-brand-secondary">
+            {completionHeadline ?? "Your story is now part of the Coleman story."}
+          </h1>
+          <p className="text-brand-muted">{completionCopy ?? "Todah rabah — thank you for sharing your Coleman story."}</p>
+        </div>
+      )}
+    </div>
+  );
+}
