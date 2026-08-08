@@ -67,4 +67,12 @@ See `docs/architecture.md` for the logging approach used throughout development 
 
 ## First-admin creation
 
-There is no signup flow for admin accounts by design (see `docs/security.md` — single trusted role, hand-rolled auth). `src/db/seed.ts` creates a dev-only admin (`brian@campcoleman.org` / a hardcoded dev password) — **this must never run against a production database.** The real first-admin creation procedure for production is one of the concrete open items tracked in `docs/production-launch-checklist.md`.
+There is no signup flow for admin accounts by design (see `docs/security.md` — single trusted role, hand-rolled auth). `src/db/seed.ts` creates a dev-only admin (`brian@campcoleman.org` / a hardcoded dev password) — **this must never run against a production database** (enforced by its `assertNotProduction()` guard).
+
+The real first-admin account is created with a separate, non-destructive script instead: `src/scripts/create-admin.ts` (`npm run admin:create`). It performs a single targeted insert/update on `admin_users` — never a truncate — generates and prints a strong random password once (or accepts one via `ADMIN_PASSWORD`), and is safe to re-run against an existing email (it updates that row rather than erroring or duplicating). Verified end-to-end against local Postgres. Once a production database exists:
+
+```
+ADMIN_EMAIL="josh.hirsch@gmail.com" ADMIN_NAME="Josh Hirsch" npm run admin:create
+```
+
+See `docs/production-launch-checklist.md` Section 2, item 5 for the full procedure and rationale.

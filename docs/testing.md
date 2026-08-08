@@ -10,12 +10,14 @@ Tests exist to catch real defects before they reach a real contributor or admin,
 
 Run with `npm run test` (or `npm run test:watch`). Config: `vitest.config.mts`. Scope: `src/**/*.test.ts` — pure logic with no browser and no live database, fast enough to run on every save.
 
-Current coverage (28 tests across 4 files):
+Current coverage (34 tests across 6 files):
 
 - `src/lib/submission-state.test.ts` — every legal and illegal processing-state transition, and the separate editorial-state transition rules; asserts `InvalidSubmissionTransitionError` is thrown for illegal transitions rather than silently allowed.
 - `src/lib/validation.test.ts` — Zod schema boundary cases (empty strings, oversized payloads, invalid enums) for the contributor identity, consent, and upload schemas.
 - `src/lib/rate-limit.test.ts` — bucket creation, threshold enforcement, and window-expiry reset behavior of `checkRateLimit`.
 - `src/lib/storage/signing.test.ts` — signed-token generation/verification, including tamper detection (mutated signature), expiry, and key/purpose binding (a read token for object A must not verify for object B or as a write token).
+- `src/lib/storage/supabase-adapter.test.ts` — `buildKey()` path format/sanitization, and fail-closed behavior when Supabase env vars are missing (does not call the live Supabase API — see `docs/production-launch-checklist.md` Section 2, item 1 for the still-open live-bucket smoke test).
+- `src/lib/providers/transcription/index.test.ts` — `isProcessingPipelineEnabled()` returns `true` by default and for `"fake"`, and `false` for `"none"` (DL-009).
 
 ### End-to-end tests (Playwright + Chromium)
 

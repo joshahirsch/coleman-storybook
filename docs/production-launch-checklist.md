@@ -9,9 +9,10 @@
 ## 1. What is genuinely ready
 
 - A working, tested application covering the full contributor loop (invite → identity → consent → camera-ready → record → upload → transcribe → analyze → admin review) against local Postgres and local file storage.
-- 28 unit tests + 15 E2E tests (including real camera/mic capture via Chromium fake devices and automated WCAG2A/WCAG2AA accessibility scanning), all passing.
+- 34 unit tests + 15 E2E tests (including real camera/mic capture via Chromium fake devices and automated WCAG2A/WCAG2AA accessibility scanning), all passing.
 - A security/privacy review with one real P0 finding found and fixed (`docs/pre-production-review.md`).
 - A provider-abstraction architecture specifically designed so that closing the remaining gaps (below) is contained, scoped engineering work, not a redesign.
+- A non-destructive, idempotent script to create the real first admin account (`npm run admin:create`), verified end-to-end against local Postgres — see Section 2, item 5.
 - Full documentation set: product vision, brand audit, architecture, data model, security, privacy/consent, decision log, testing, deployment, cost model, this checklist.
 
 ## 2. What is NOT ready — concrete engineering work required before Phase 14
@@ -22,7 +23,11 @@ These are not "nice to haves" — without them, "deploy to production" is not ac
 2. ~~Transcription provider~~ — **not needed for this launch.** Owner decision (DL-009): hold off on any paid transcription/AI vendor for the initial POC. Set `TRANSCRIPTION_PROVIDER=none` in production (not `fake` — see `.env.example` and DL-009 for why that distinction matters). The vendor recommendation researched earlier (AssemblyAI/Deepgram + Claude Haiku, `docs/deployment.md`) is preserved for when this is revisited post-POC.
 3. ~~AI story-analysis provider~~ — same as above, not needed for this launch.
 4. **Drizzle's migration workflow should switch from `push` to versioned migrations** (`drizzle-kit generate` + `drizzle-kit migrate`) before a production database exists, so schema changes are reviewable and reversible. See `docs/deployment.md`.
-5. **Real first-admin creation.** Identity confirmed: **Josh Hirsch, josh.hirsch@gmail.com**. `src/db/seed.ts` creates a dev-only admin and must never touch production (enforced by the `assertNotProduction()` guard from the Phase 12 review) — the real account still needs to be created deliberately once a production database exists (e.g. a one-off script or manual `INSERT` with a freshly-generated bcrypt hash of a real, unique password communicated out of band — never committed to the repo).
+5. ~~Real first-admin creation~~ — **script ready, not yet run.** Identity confirmed: **Josh Hirsch, josh.hirsch@gmail.com**. `src/db/seed.ts` creates a dev-only admin and must never touch production (enforced by the `assertNotProduction()` guard from the Phase 12 review). The real account is created with a separate, non-destructive script: `src/scripts/create-admin.ts` (`npm run admin:create`). It does a single targeted insert/update on `admin_users`, generates and prints a strong random password once (or accepts one via `ADMIN_PASSWORD`), is safe to re-run (updates the existing row by email instead of erroring or duplicating), and refuses to guess which organization to attach the admin to if more than one exists. Verified end-to-end against local Postgres (create, idempotent re-run, explicit `--reset-password`, and the missing-args error path all behave as documented). Once a production database exists:
+   ```
+   ADMIN_EMAIL="josh.hirsch@gmail.com" ADMIN_NAME="Josh Hirsch" npm run admin:create
+   ```
+   Copy the printed password immediately into a password manager — it is never stored in plaintext and is not shown again.
 
 ## 3. Environment variable inventory
 
@@ -50,7 +55,7 @@ See `.env.example` for the authoritative source. Every variable below needs a **
 - [ ] Domain/DNS: hosting platform's default subdomain (decided, DL-008) — no action needed beyond noting the resulting URL.
 - [ ] All environment variables from Section 3 set in the hosting platform's secret store (never committed to the repo) — note `TRANSCRIPTION_PROVIDER=none`, not `fake`.
 - [ ] `npm run db:push` (or, if migrations have been switched to versioned by then, `drizzle-kit migrate`) run once against the real production database to create the schema.
-- [ ] Real first-admin account created for Josh Hirsch (josh.hirsch@gmail.com) per Section 2, item 5.
+- [ ] Real first-admin account created for Josh Hirsch (josh.hirsch@gmail.com) — run `npm run admin:create` per Section 2, item 5.
 - [ ] `npm audit` run and any high/critical findings resolved (no CI is configured yet to do this automatically — see `docs/pre-production-review.md` P3-2).
 
 ## 5. Monitoring plan
