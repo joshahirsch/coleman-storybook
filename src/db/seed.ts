@@ -38,10 +38,27 @@ import { writeLocalObject } from "@/lib/storage/local-adapter";
 
 type Relationship = "camper" | "staff" | "camper_staff" | "parent" | "alumni_parent" | "volunteer" | "other";
 
+function assertNotProduction() {
+  // This script TRUNCATEs every table. Running it against a real production
+  // database would be a catastrophic, irreversible data-loss incident — see
+  // docs/pre-production-review.md (P0 finding, fixed). Refuse by default;
+  // an operator who genuinely needs to seed a non-Camp-Coleman-production
+  // environment that happens to have NODE_ENV=production (e.g. a staging
+  // env deployed with production-like settings) must explicitly opt in.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_SEED_IN_PRODUCTION !== "true") {
+    throw new Error(
+      "Refusing to run: NODE_ENV=production and ALLOW_SEED_IN_PRODUCTION is not set to \"true\". " +
+        "This script destructively truncates every table. If you are certain this is not the real " +
+        "Camp Coleman production database, set ALLOW_SEED_IN_PRODUCTION=true explicitly and re-run.",
+    );
+  }
+}
+
 async function resetDatabase() {
   // Dev-only convenience so `npm run db:seed` is safely re-runnable. Order
   // matters for FK constraints; TRUNCATE ... CASCADE would also work but
   // explicit deletes make the dependency order legible.
+  assertNotProduction();
   const { sql: rawSql } = await import("drizzle-orm");
   await db.execute(rawSql`
     TRUNCATE TABLE

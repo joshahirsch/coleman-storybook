@@ -20,6 +20,7 @@ These are deliberately deferred, not overlooked. Building them prematurely would
 - Vector/semantic search infrastructure (Postgres full-text search is the V1 approach; data model leaves room to add embeddings later — see `docs/architecture.md`)
 - Recommendation engine
 - White-label multi-organization onboarding / full multi-tenant SaaS (V1 is "multi-organization ready," not "multi-tenant SaaS now")
+- Structured "year(s) associated" field + a real admin year filter — V1 stores this as free text the contributor types (e.g. "Camper 2005-2011, Staff 2012-2015"); a trustworthy year filter needs either a structured start/end-year field on `contributors` or a deliberate parsing strategy, not a guess
 
 ## Productization
 

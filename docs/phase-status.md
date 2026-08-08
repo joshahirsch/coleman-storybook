@@ -4,18 +4,18 @@
 |---|---|---|---|---|
 | 0 — Product & Brand Foundation | COMPLETE | Workspace scaffolded; campcoleman.org inspected (homepage, /alumni, /about-us); brand-audit.md, product-vision.md, decision-log.md, phase-status.md created. | None. No official Coleman brand guide supplied yet (tracked as an open item, not a blocker to proceeding). | Phase 1: Technical architecture, data model, security model. |
 | 1 — Architecture & Implementation Plan | COMPLETE | docs/architecture.md written: stack decision (Next.js/TS/Tailwind/Postgres/Supabase), component diagram, data model summary, dual state machines, upload flow, auth boundaries, threat model summary, test strategy, deployment topology. | None material. Vendor selection for transcription/AI deferred to Phases 8/9 by design (avoids requesting API keys before needed). | Phase 2: application scaffold, design system, brand tokens, routing (mock data acceptable at this phase). |
-| 2 — App Scaffold, Design System, Routing | NOT_STARTED | | | |
-| 3 — Database, Campaigns, Contributors, Consent | NOT_STARTED | | | |
-| 4 — Camera/Mic Recording UX | NOT_STARTED | | | |
-| 5 — Private Media Storage & Upload Pipeline | NOT_STARTED | | | |
-| 6 — Contributor Vertical Slice (E2E) | NOT_STARTED | | | |
-| 7 — Admin Auth & Story Library | NOT_STARTED | | | |
-| 8 — Transcription Pipeline | NOT_STARTED | | | |
-| 9 — AI Story Intelligence | NOT_STARTED | | | |
-| 10 — Search, Filtering, Tagging | NOT_STARTED | | | |
-| 11 — Polish, Accessibility, Mobile QA | NOT_STARTED | | | |
-| 12 — Security/Privacy Pre-Production Review | NOT_STARTED | | | |
-| 13 — Deployment Prep (no production mutation) | NOT_STARTED | | | STOP for owner production authorization after this phase. |
+| 2 — App Scaffold, Design System, Routing | COMPLETE | Next.js 16 App Router scaffold, Tailwind v4 brand-token theme (placeholder values per DL-003), org-aware root layout, campaign landing routing. | None material. | Phase 3. |
+| 3 — Database, Campaigns, Contributors, Consent | COMPLETE | Full Drizzle schema (`src/db/schema.ts`) covering org/brand/admin, campaigns/questions, contributors/submissions/answers/media, consent records, transcripts/analyses, tags/reviews, processing jobs, audit/analytics. Consent capture with versioning + permitted-use classification implemented and traced. | Consent text not legally reviewed (tracked, not a blocker to building) — see `docs/legal-review-required.md`. | Phase 4. |
+| 4 — Camera/Mic Recording UX | COMPLETE | Real `getUserMedia`/`MediaRecorder` contributor flow (`contributor-flow.tsx`); camera-readiness step; permission-denial recovery guidance (verified via E2E, not just designed). | None material. | Phase 5. |
+| 5 — Private Media Storage & Upload Pipeline | COMPLETE | `MediaStorageAdapter` interface + local filesystem implementation, HMAC-signed time-limited tokens, upload init/put/confirm route handlers with server-side re-verification before marking any upload durable ("never false success"). | Only the local/dev storage adapter exists — a real cloud adapter (Supabase/S3/R2) is designed-for but not written; see `docs/deployment.md` "Provider abstraction status." | Phase 6. |
+| 6 — Contributor Vertical Slice (E2E) | COMPLETE | Full landing→identity→consent→camera→record→upload→completion flow works end to end against a real dev server + real Postgres, verified by Playwright with real fake-device video capture. A genuine stale-closure upload-finalization bug was found and fixed via this testing (see `docs/decision-log.md`-adjacent commit history). | None material. | Phase 7. |
+| 7 — Admin Auth & Story Library | COMPLETE | Hand-rolled bcrypt+JWT admin auth (DL-007), edge-gated fail-closed via `src/proxy.ts`, story library list view with campaign/editorial/favorite/search filters, submission detail view with recordings/transcripts/consent trace. | Single admin role only (no RBAC tiers) — matches V1 scope, not a gap. | Phase 8. |
+| 8 — Transcription Pipeline | COMPLETE | DB-backed job queue (`processing_jobs`, `SELECT ... FOR UPDATE SKIP LOCKED` claiming), `TranscriptionProvider` interface + deterministic synthetic implementation, clearly labeled SYNTHETIC in the admin UI. | Only the fake/local transcription provider exists — no real vendor selected/funded yet (owner decision, see `docs/cost-model.md`). | Phase 9. |
+| 9 — AI Story Intelligence | COMPLETE | `StoryAnalysisProvider` interface + synthetic implementation (keyword-based themes, transcript-sourced pull quotes — never fabricated, first-two-sentences summary), rendered in the admin UI as assistive-only metadata that never touches editorial state. | Only the fake/local analysis provider exists — same owner decision as Phase 8. | Phase 10. |
+| 10 — Search, Filtering, Tagging | COMPLETE | Postgres full-text + ILIKE search across transcripts and contributor names; campaign, editorial-state, favorite, audience (relationship), and AI-theme filters all implemented and combinable. | No structured "year associated" field/filter — `yearsAssociated` is free text; would need a schema change to do honestly rather than guess-parse (see `docs/future-roadmap.md`). Manual tag-management UI (assign/create a `manual` tag from the admin UI) is not built — the `tags`/`submission_tags` schema exists but nothing writes to it yet. | Phase 11. |
+| 11 — Polish, Accessibility, Mobile QA | COMPLETE | Automated `@axe-core/playwright` WCAG2A/WCAG2AA scanning across 5 representative pages, zero serious/critical violations after fixing one real contrast bug (`text-gray-500` → `text-gray-600`, WCAG 1.4.3). Mobile-first Tailwind layout throughout the contributor flow. | No real cross-browser (Safari/WebKit) or real-device manual QA has been performed — E2E is Chromium-only for reasons documented in `docs/testing.md`. Recommended before Phase 14. | Phase 12. |
+| 12 — Security/Privacy Pre-Production Review | COMPLETE | `docs/pre-production-review.md` written with P0-P3 classified findings from a genuine review of the built code; all P0 findings resolved before Phase 13. | See `docs/pre-production-review.md` for open P2/P3 items carried forward. | Phase 13. |
+| 13 — Deployment Prep (no production mutation) | COMPLETE | `docs/deployment.md` and `docs/production-launch-checklist.md` written. No production infrastructure was provisioned or mutated — per the explicit Phase 13 boundary, this phase stops at readiness documentation. | See `docs/production-launch-checklist.md` — several concrete items (real storage/transcription/AI adapters, vendor selection, first-admin procedure, versioned migrations) remain before Phase 14 can start. | **STOP — owner authorization required before Phase 14.** |
 | 14 — Owner-Authorized Production Deploy | NOT_STARTED | | Requires explicit owner authorization. | |
 | 15 — Bounded Camp Coleman Pilot | NOT_STARTED | | Requires Phase 14 complete. | |
 | 16 — Self-Service Campaign Management | NOT_STARTED | | Requires Phase 15 validation. | |
@@ -23,4 +23,4 @@
 | 18 — Public Storybook Curation | NOT_STARTED | | Requires explicit owner authorization. | |
 | 19 — Productization Assessment | NOT_STARTED | | | |
 
-Last updated: 2026-08-08 (Phase 0 completion).
+Last updated: 2026-08-08 (Phase 0–13 build complete; stopped at the Phase 13 owner-authorization gate per instruction — see `docs/production-launch-checklist.md`).

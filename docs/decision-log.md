@@ -74,4 +74,32 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
-*(Further entries — stack selection, storage provider, auth provider, transcription/AI provider, tenancy model details — will be added in Phase 1 as those decisions are made.)*
+## DL-006: Drizzle ORM instead of Prisma
+
+**Decision:** Use `drizzle-orm` (with the `postgres` driver) instead of Prisma for all database access and schema management.
+
+**Why:** Prisma's CLI (`prisma generate`, `prisma migrate`, `prisma db push`) requires downloading a native "schema-engine" binary from `binaries.prisma.sh` at install/build time. This sandbox's network allowlist blocks that host (`403 Forbidden`), so Prisma could not be used to develop this project at all — not a preference, a hard constraint discovered when scaffolding the DB layer. Drizzle is pure TypeScript with no native binary dependency; `drizzle-kit push` and all query code work entirely over the standard `postgres` npm driver.
+
+**Alternatives:** Prisma (blocked, see above); a raw SQL query builder (e.g. Kysely) with hand-written migrations; the `pg` driver with no ORM at all.
+
+**Tradeoffs:** Drizzle's migration tooling is less mature than Prisma's and its relational query API is more verbose in places (see the manual per-row loops in `src/lib/data/admin.ts`'s `getSubmissionDetailForAdmin`). Schema-as-TypeScript (`src/db/schema.ts`) is the source of truth either way, so this is a low-risk substitution. If a production environment turns out to allow `binaries.prisma.sh`, switching back is possible but not planned — Drizzle has been reliable throughout the build and there's no concrete reason to revisit.
+
+**Revisit When:** Never, absent a specific pain point Drizzle can't solve. Not blocked on network access resuming.
+
+---
+
+## DL-007: Hand-rolled admin authentication (bcrypt + JWT session cookie) instead of a managed auth provider
+
+**Decision:** Admin login uses a first-party `admin_users` table (bcrypt-hashed passwords via `bcryptjs`) and a `jose`-signed HS256 JWT stored in an httpOnly session cookie, gated at the edge in `src/proxy.ts`. No third-party auth provider (Supabase Auth, Clerk, Auth0, NextAuth/Auth.js with an OAuth provider, Google Workspace SSO) is wired in.
+
+**Why:** The spec's preferred stack names Supabase as an option but does not mandate Supabase Auth specifically, and no Supabase project, Google Workspace tenant, or other identity-provider credentials exist in this environment to configure real OAuth/SSO against. Building against credentials that don't exist would mean shipping untestable code. A small, self-contained admin user table with industry-standard primitives (bcrypt for password storage, signed JWT for session state, httpOnly + secure cookie flags, fail-closed edge middleware) is fully testable now and is a well-understood, defensible pattern for a single-role admin surface with a handful of Camp Coleman staff users — this is not a case that needs enterprise SSO (see `docs/future-roadmap.md`).
+
+**Alternatives:** Supabase Auth (needs a real Supabase project + env credentials this environment doesn't have); NextAuth/Auth.js (adds a dependency and still needs a real OAuth provider or its own credentials store to be meaningfully different from what was built); a shared static password (rejected — no per-admin accountability, fails the audit-log requirement that events be attributable to a specific admin user).
+
+**Tradeoffs:** No password-reset flow, no MFA, no SSO, no session revocation list (a stolen/leaked JWT is valid until its 8-hour expiry) — all reasonable V1 gaps for a small internal admin surface but real limitations. In-memory rate limiting on the login action (see `docs/security.md` residual risks) is also a consequence of not having a managed provider's built-in throttling. If Camp Coleman later wants staff to log in with their existing Google Workspace accounts, or the admin user count grows past a handful of trusted staff, this should be revisited.
+
+**Revisit When:** A real Supabase/Google Workspace/other IdP credential set becomes available and is explicitly authorized for use, or before onboarding a second organization with its own admin staff (multi-org admin identity is out of scope for this decision).
+
+---
+
+*(Further entries will be added as significant decisions arise in later phases.)*
