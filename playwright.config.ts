@@ -1,4 +1,15 @@
+import { existsSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
+
+// This sandbox ships a pre-installed Chromium at a pinned revision (network
+// access to Playwright's own browser-download CDN is blocked here) and
+// PLAYWRIGHT_CHROMIUM_PATH/the hardcoded fallback point at it explicitly.
+// Neither exists on a normal CI runner or a developer's machine, where
+// `npx playwright install chromium` manages its own browser — so only pass
+// executablePath when one of those paths actually exists; otherwise leave it
+// undefined and let Playwright resolve its managed browser normally.
+const sandboxChromiumPath = process.env.PLAYWRIGHT_CHROMIUM_PATH || "/opt/pw-browsers/chromium";
+const chromiumExecutablePath = existsSync(sandboxChromiumPath) ? sandboxChromiumPath : undefined;
 
 /**
  * E2E config. Chromium is launched with fake camera/mic devices
@@ -20,11 +31,7 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     trace: "retain-on-failure",
     launchOptions: {
-      // This sandbox ships a pre-installed Chromium at a pinned revision
-      // that may not match whatever revision this @playwright/test version
-      // would otherwise try to download (and downloading is blocked by the
-      // network allowlist anyway) — point at it explicitly.
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || "/opt/pw-browsers/chromium",
+      executablePath: chromiumExecutablePath,
       args: [
         "--use-fake-device-for-media-stream",
         "--use-fake-ui-for-media-stream",

@@ -43,6 +43,15 @@ Current suite (15 tests, single Chromium project, `workers: 1` / `fullyParallel:
 - **Playwright's own browser download is blocked** by this sandbox's network allowlist (`403` fetching a pinned Chromium revision from Playwright's CDN). `playwright.config.ts` instead points `launchOptions.executablePath` at the sandbox's pre-installed Chromium (`/opt/pw-browsers/chromium`, overridable via `PLAYWRIGHT_CHROMIUM_PATH`). A CI environment with unrestricted network access can either keep this override (fastest, no download) or remove it and let Playwright manage its own browser binary.
 - **Real camera/mic hardware doesn't exist in this sandbox**, so tests rely on Chromium's built-in fake-device flags rather than a real webcam — these produce genuine synthetic video/audio frames that flow through the real `MediaRecorder` API, so the app's handling of that data is still tested for real; only the *source* of the frames is synthetic.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main` (GitHub Actions, so unlike this sandbox it has normal network access — no download restrictions apply there). Two jobs:
+
+- **`checks`** — `npm run typecheck`, `npm run lint`, `npm run test` (unit tests, no database needed), then `npm audit --audit-level=high`. The audit step gates on high/critical only; the known moderate `esbuild`/`drizzle-kit` dev-dependency findings (see `docs/pre-production-review.md` P3-2) don't fail the build, but a new high/critical finding will.
+- **`e2e`** — spins up a real `postgres:16` service container, installs a Playwright-managed Chromium (`npx playwright install --with-deps chromium` — this sandbox's pre-installed-browser workaround in `playwright.config.ts` only applies when that sandbox path actually exists, so it's a no-op on a normal runner), writes a throwaway `.env.local` from the job's own non-secret env values (needed because `npm run db:seed` — called by `e2e/global-setup.ts` — is hardcoded to `tsx --env-file=.env.local` for local-dev convenience, and `.env.local` is gitignored so it doesn't exist in a fresh checkout), runs `npm run db:push` against the fresh database, then `npm run test:e2e`. The Playwright HTML report uploads as a build artifact on failure (or success) for debugging.
+
+No production secrets are used anywhere in CI — every value in the workflow's `env:` block is a throwaway, clearly-labeled placeholder scoped to the ephemeral CI database and local-disk storage.
+
 ## Running the full verification battery before a commit
 
 ```

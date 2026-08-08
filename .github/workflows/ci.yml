@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# All values below are throwaway secrets for an ephemeral CI Postgres
+# instance and local-disk media storage — none of this touches production,
+# and none of it is a real credential (see docs/security.md,
+# docs/production-launch-checklist.md Section 3 for what real production
+# env vars are actually needed and why none of them belong in this file).
+env:
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/coleman_storybook
+  SESSION_SECRET: ci-only-session-secret-not-a-real-credential-000000
+  STORAGE_DRIVER: local
+  STORAGE_LOCAL_DIR: ./.data/media
+  STORAGE_SIGNING_SECRET: ci-only-storage-signing-secret-not-real-000000
+  TRANSCRIPTION_PROVIDER: fake
+  AI_ANALYSIS_PROVIDER: fake
+  CRON_SECRET: ci-only-cron-secret-not-a-real-credential-000000
+  APP_BASE_URL: http://localhost:3000
+  NODE_ENV: development
+
+jobs:
+  checks:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      # Gate on high/critical only — as of writing there are 4 known moderate
+      # findings (esbuild, via drizzle-kit's dev-only dependency chain) whose
+      # only fix is a breaking drizzle-kit downgrade; see
+      # docs/pre-production-review.md P3-2 for why that tradeoff was
+      # deliberately not taken. This step exists so a NEW high/critical
+      # finding fails CI instead of going unnoticed until someone thinks to
+      # run `npm audit` by hand before a deploy.
+      - run: npm audit --audit-level=high
+
+  e2e:
+    name: End-to-end (Playwright + Chromium)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: coleman_storybook
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+      - run: npm ci
+      # No PLAYWRIGHT_CHROMIUM_PATH/sandbox path exists on this runner, so
+      # playwright.config.ts falls back to a Playwright-managed browser —
+      # install it here. --with-deps also installs the OS-level libraries
+      # Chromium needs on a bare Ubuntu runner.
+      - run: npx playwright install --with-deps chromium
+      # .env.local is gitignored (never committed, see .gitignore) but
+      # `npm run db:seed` / `npm run jobs:process` are dev-convenience
+      # scripts hardcoded to `tsx --env-file=.env.local` — write one here
+      # from this job's own `env:` block (all throwaway CI values, not real
+      # secrets) so e2e/global-setup.ts's `npm run db:seed` call doesn't
+      # fail with "'.env.local: not found".
+      - name: Write .env.local for CI (throwaway values, see job env: block)
+        run: |
+          cat > .env.local <<EOF
+          DATABASE_URL=${DATABASE_URL}
+          SESSION_SECRET=${SESSION_SECRET}
+          STORAGE_DRIVER=${STORAGE_DRIVER}
+          STORAGE_LOCAL_DIR=${STORAGE_LOCAL_DIR}
+          STORAGE_SIGNING_SECRET=${STORAGE_SIGNING_SECRET}
+          TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER}
+          AI_ANALYSIS_PROVIDER=${AI_ANALYSIS_PROVIDER}
+          CRON_SECRET=${CRON_SECRET}
+          APP_BASE_URL=${APP_BASE_URL}
+          NODE_ENV=${NODE_ENV}
+          EOF
+      - run: npm run db:push
+      - run: npm run test:e2e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore

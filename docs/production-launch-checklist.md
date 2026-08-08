@@ -13,6 +13,7 @@
 - A security/privacy review with one real P0 finding found and fixed (`docs/pre-production-review.md`).
 - A provider-abstraction architecture specifically designed so that closing the remaining gaps (below) is contained, scoped engineering work, not a redesign.
 - A non-destructive, idempotent script to create the real first admin account (`npm run admin:create`), verified end-to-end against local Postgres — see Section 2, item 5.
+- CI (`.github/workflows/ci.yml`) running typecheck, lint, unit tests, `npm audit --audit-level=high`, and the full Playwright E2E suite against a real Postgres service container on every push/PR to `main`.
 - Full documentation set: product vision, brand audit, architecture, data model, security, privacy/consent, decision log, testing, deployment, cost model, this checklist.
 
 ## 2. What is NOT ready — concrete engineering work required before Phase 14
@@ -56,7 +57,7 @@ See `.env.example` for the authoritative source. Every variable below needs a **
 - [ ] All environment variables from Section 3 set in the hosting platform's secret store (never committed to the repo) — note `TRANSCRIPTION_PROVIDER=none`, not `fake`.
 - [ ] `npm run db:push` (or, if migrations have been switched to versioned by then, `drizzle-kit migrate`) run once against the real production database to create the schema.
 - [ ] Real first-admin account created for Josh Hirsch (josh.hirsch@gmail.com) — run `npm run admin:create` per Section 2, item 5.
-- [ ] `npm audit` run and any high/critical findings resolved (no CI is configured yet to do this automatically — see `docs/pre-production-review.md` P3-2).
+- [x] `npm audit --audit-level=high` now runs automatically on every push/PR to `main` via `.github/workflows/ci.yml` (see `docs/pre-production-review.md` P3-2 — fixed). No action needed here beyond keeping CI green; a new high/critical finding will fail the build.
 
 ## 5. Monitoring plan
 

@@ -38,9 +38,11 @@ Tracked in detail in `docs/legal-review-required.md` and `docs/privacy-and-conse
 
 **Fix:** Changed to throw the same way `getSecretKey()` in `src/lib/auth/session.ts` already does (missing or under-16-char secret → hard failure) rather than silently degrading. See `src/lib/hash.ts`. Fixed in this review pass since it was a one-line, low-risk change; verified via the full test suite (28/28 unit, 15/15 E2E) passing unchanged afterward.
 
-### P3-2: No automated dependency vulnerability scanning in CI
+### P3-2: No automated dependency vulnerability scanning in CI — fixed
 
-There is no CI pipeline defined in this repository yet at all (no `.github/workflows/`), so this is really "no CI exists yet" rather than "CI exists but skips a scan step." `npm audit` should be run manually before each deploy until CI is set up. Tracked in `docs/production-launch-checklist.md`.
+**Original finding:** There was no CI pipeline defined in this repository at all (no `.github/workflows/`), so this was really "no CI exists yet" rather than "CI exists but skips a scan step." `npm audit` had to be run manually before each deploy.
+
+**Fix:** Added `.github/workflows/ci.yml` (two jobs: `checks` — typecheck, lint, unit tests, `npm audit --audit-level=high` — and `e2e` — Playwright against a real Postgres service container), running on every push/PR to `main`. The audit step gates on high/critical only; the 4 pre-existing moderate `esbuild`/`drizzle-kit` findings (see the project's `npm audit` output) are a known, deliberately-not-fixed dev-dependency issue (the only fix is a breaking `drizzle-kit` downgrade) and shouldn't fail every build — but a *new* high/critical finding now will, instead of going unnoticed until someone thinks to run `npm audit` by hand. See `docs/testing.md` for what each CI job actually runs.
 
 ### P3-3: `objectPath()`'s path-traversal comment is more reassuring than precise
 
