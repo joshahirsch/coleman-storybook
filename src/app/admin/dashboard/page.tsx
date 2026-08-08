@@ -1,8 +1,18 @@
 import Link from "next/link";
 import { requireAdminSession } from "@/lib/auth/session";
-import { listSubmissionsForAdmin } from "@/lib/data/admin";
+import { listSubmissionsForAdmin, listDistinctThemes } from "@/lib/data/admin";
 import { listAllCampaigns } from "@/lib/data/campaigns";
 import { adminLogoutAction } from "@/lib/actions/admin-actions";
+
+const AUDIENCE_OPTIONS = [
+  { value: "camper", label: "Camper" },
+  { value: "staff", label: "Staff" },
+  { value: "camper_staff", label: "Camper & Staff" },
+  { value: "parent", label: "Parent" },
+  { value: "alumni_parent", label: "Alumni Parent" },
+  { value: "volunteer", label: "Volunteer" },
+  { value: "other", label: "Other" },
+] as const;
 
 function StateBadge({ state }: { state: string }) {
   const styles: Record<string, string> = {
@@ -34,18 +44,28 @@ function EditorialBadge({ state }: { state: string }) {
 export default async function AdminDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ campaign?: string; editorial?: string; favorite?: string; q?: string }>;
+  searchParams: Promise<{
+    campaign?: string;
+    editorial?: string;
+    favorite?: string;
+    q?: string;
+    audience?: string;
+    theme?: string;
+  }>;
 }) {
   const session = await requireAdminSession();
   const params = await searchParams;
 
-  const [campaigns, submissions] = await Promise.all([
+  const [campaigns, themes, submissions] = await Promise.all([
     listAllCampaigns(),
+    listDistinctThemes(),
     listSubmissionsForAdmin({
       campaignId: params.campaign || undefined,
       editorialState: (params.editorial as "PENDING" | "APPROVED" | "REJECTED" | undefined) || undefined,
       favoriteOnly: params.favorite === "1",
       searchText: params.q || undefined,
+      audience: params.audience || undefined,
+      theme: params.theme || undefined,
     }),
   ]);
 
@@ -97,6 +117,28 @@ export default async function AdminDashboardPage({
             <option value="REJECTED">Rejected</option>
           </select>
         </label>
+        <label className="text-sm text-gray-700">
+          Audience
+          <select name="audience" defaultValue={params.audience ?? ""} className="mt-1 block rounded-md border border-gray-300 px-3 py-1.5 text-sm">
+            <option value="">Any audience</option>
+            {AUDIENCE_OPTIONS.map((a) => (
+              <option key={a.value} value={a.value}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-gray-700">
+          Theme (AI-derived)
+          <select name="theme" defaultValue={params.theme ?? ""} className="mt-1 block rounded-md border border-gray-300 px-3 py-1.5 text-sm">
+            <option value="">Any theme</option>
+            {themes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" name="favorite" value="1" defaultChecked={params.favorite === "1"} />
           Favorites only
@@ -104,7 +146,7 @@ export default async function AdminDashboardPage({
         <button type="submit" className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800">
           Apply
         </button>
-        {(params.q || params.campaign || params.editorial || params.favorite) && (
+        {(params.q || params.campaign || params.editorial || params.favorite || params.audience || params.theme) && (
           <Link href="/admin/dashboard" className="text-sm text-gray-600 underline">
             Clear filters
           </Link>

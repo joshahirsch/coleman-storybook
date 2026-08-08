@@ -18,6 +18,10 @@ export interface SubmissionListFilters {
   editorialState?: "PENDING" | "APPROVED" | "REJECTED";
   favoriteOnly?: boolean;
   searchText?: string;
+  /** Contributor relationship to the camp — the spec's "audience" concept. */
+  audience?: string;
+  /** AI-derived theme label (from the latest story analysis per submission). */
+  theme?: string;
 }
 
 export interface SubmissionListRow {
@@ -37,6 +41,19 @@ export interface SubmissionListRow {
 export async function listSubmissionsForAdmin(filters: SubmissionListFilters): Promise<SubmissionListRow[]> {
   const conditions: SQL[] = [];
   if (filters.campaignId) conditions.push(eq(submissions.campaignId, filters.campaignId));
+  if (filters.audience) {
+    conditions.push(eq(contributors.relationship, filters.audience as (typeof contributors.relationship.enumValues)[number]));
+  }
+
+  if (filters.theme) {
+    const matchingAnalyses = await db
+      .select({ submissionId: storyAnalyses.submissionId })
+      .from(storyAnalyses)
+      .where(sql`${filters.theme} = ANY(${storyAnalyses.themes})`);
+    const themeSubmissionIds = Array.from(new Set(matchingAnalyses.map((a) => a.submissionId)));
+    if (themeSubmissionIds.length === 0) return [];
+    conditions.push(inArray(submissions.id, themeSubmissionIds));
+  }
 
   let searchSubmissionIds: string[] | null = null;
   if (filters.searchText && filters.searchText.trim().length > 0) {
@@ -138,6 +155,16 @@ export async function listSubmissionsForAdmin(filters: SubmissionListFilters): P
     favorite: r.favorite ?? false,
     hasFailedProcessing: failedJobSubmissionIds.has(r.submissionId),
   }));
+}
+
+/** Distinct AI-derived theme labels across all story analyses, for the filter dropdown. */
+export async function listDistinctThemes(): Promise<string[]> {
+  const rows = await db.select({ themes: storyAnalyses.themes }).from(storyAnalyses);
+  const set = new Set<string>();
+  for (const row of rows) {
+    for (const theme of row.themes) set.add(theme);
+  }
+  return Array.from(set).sort();
 }
 
 export async function getSubmissionDetailForAdmin(submissionId: string) {
