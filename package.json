@@ -16,6 +16,7 @@
     "jobs:process": "tsx --env-file=.env.local src/scripts/process-jobs.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
     "jose": "^6.2.8",

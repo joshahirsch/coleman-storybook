@@ -18,9 +18,9 @@
 
 These are not "nice to haves" — without them, "deploy to production" is not actually possible, only "deploy something that will error on first real use."
 
-1. **A real media storage adapter must be written.** Only a local-filesystem adapter exists (`src/lib/storage/local-adapter.ts`). It implements the same `MediaStorageAdapter` interface a Supabase Storage / S3 / R2 adapter would, so this is additive work (one new file + one line in `src/lib/storage/index.ts`), not a rearchitecture — but it does not exist yet. See `docs/deployment.md`.
-2. **A real transcription provider must be chosen and integrated.** Only the deterministic `fake-local` provider exists. Same story: `TranscriptionProvider` interface exists, no real implementation does.
-3. **A real AI story-analysis provider must be chosen and integrated.** Same as above for `StoryAnalysisProvider`.
+1. **The Supabase Storage media adapter exists but is unverified.** `src/lib/storage/supabase-adapter.ts` is written against Supabase's documented SDK methods, but has never run against a live bucket (no credentials exist in this environment) and has one explicitly flagged open question (the raw-HTTP upload contract for a signed-upload token isn't fully documented by Supabase; the client-side upload code may need a Supabase-specific path using their SDK's `uploadToSignedUrl()` rather than the current generic XHR PUT). **This must be smoke-tested end-to-end against a real bucket early in Phase 14**, before relying on it for real contributor uploads.
+2. **A real transcription provider must be integrated.** Vendor recommendation delivered (AssemblyAI, or Deepgram as an equal alternative — see `docs/deployment.md` "Vendor recommendation"); owner has not yet confirmed a final pick or funded an API key. Only the deterministic `fake-local` provider is implemented.
+3. **A real AI story-analysis provider must be integrated.** Vendor recommendation delivered (Anthropic Claude API, Haiku model — see `docs/deployment.md`); owner has not yet confirmed or funded it. Only `fake-local` is implemented.
 4. **Drizzle's migration workflow should switch from `push` to versioned migrations** (`drizzle-kit generate` + `drizzle-kit migrate`) before a production database exists, so schema changes are reviewable and reversible. See `docs/deployment.md`.
 5. **A real first-admin creation procedure.** `src/db/seed.ts` creates a dev-only admin with a hardcoded password and must never touch production (now enforced by the `assertNotProduction()` guard added in the Phase 12 review — but that guard prevents accidental seeding, it does not create a real admin account). A production first-admin needs to be created deliberately (e.g. a one-off script or manual `INSERT` with a freshly-generated bcrypt hash of a real, unique password, communicated to that person out of band, never committed to the repo).
 
@@ -32,10 +32,10 @@ See `.env.example` for the authoritative source. Every variable below needs a **
 |---|---|
 | `DATABASE_URL` | Real managed Postgres connection string. Confirm it enforces TLS. |
 | `SESSION_SECRET` | Fresh random secret (`openssl rand -base64 32`), never reused from dev. Losing/rotating this invalidates all admin sessions at once — a useful emergency "log everyone out" lever, not just a downside. |
-| `STORAGE_DRIVER` | Set to whatever the new real adapter registers itself as, once written. |
-| `STORAGE_SIGNING_SECRET` | Fresh random secret, independent from `SESSION_SECRET`. |
-| `TRANSCRIPTION_PROVIDER` + its API key | Once a vendor is chosen and integrated. |
-| `AI_ANALYSIS_PROVIDER` + its API key | Once a vendor is chosen and integrated. |
+| `STORAGE_DRIVER` | `supabase` — adapter is written, unverified against a live bucket (see Section 2, item 1). |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_STORAGE_BUCKET` | Real Supabase project credentials once provisioned. |
+| `TRANSCRIPTION_PROVIDER` + its API key | Once AssemblyAI/Deepgram is confirmed and integrated (Section 2, item 2). |
+| `AI_ANALYSIS_PROVIDER` + its API key | Once the Claude API integration is written (Section 2, item 3) and a key is provisioned. |
 | `CRON_SECRET` | Fresh random secret; must match whatever the production scheduler is configured to send. |
 | `APP_BASE_URL` | The real production domain, `https://`. |
 | `NODE_ENV` | Must be `production` in the deployed environment — this is also what now activates the `assertNotProduction()` seed-script guard, so getting this right matters for safety, not just convention. |
@@ -77,18 +77,22 @@ Delegated to the managed Postgres provider's automated backups — confirm they'
 
 ## 9. Unresolved decisions requiring owner input before Phase 14
 
-These are genuine decisions, not defaults an engineer should pick alone:
+### Decided (owner-approved, see `docs/decision-log.md` DL-008)
 
-1. **Storage vendor** (Supabase Storage / S3 / R2 / other) — cost profile differs meaningfully by egress pricing (see `docs/cost-model.md`); needs a budget-aware choice.
-2. **Transcription vendor** — needs a choice and a funded API budget.
-3. **AI analysis vendor** — needs a choice and a funded API budget.
-4. **Hosting budget approval** — even likely-free-tier-sufficient services should be explicitly approved, since usage can grow past free tiers.
-5. **Production domain** — use the hosting platform's default subdomain for the Phase 15 pilot, or set up a real Camp Coleman domain/subdomain now?
-6. **Consent language legal review** — counsel must review and approve the actual text in `src/lib/consent.ts` before any real contributor sees it. This blocks real use regardless of infrastructure readiness.
-7. **Data retention policy** — how long is contributor media/transcript data kept, and what does "withdrawal" concretely do to already-processed AI artifacts vs. the original recording? See `docs/privacy-and-consent.md`.
-8. **Who is the real first admin(s)?** Names/emails needed to create real production admin accounts per Section 2, item 5.
-9. **Recording-consent law jurisdiction check** — confirm applicability given contributors may record from anywhere (one-party vs. two-party consent states/countries), per `docs/legal-review-required.md`.
-10. **Pilot scope and timeline** — how many contributors, which campaigns, over what window, for the Phase 15 bounded pilot this launch is presumably in service of.
+1. ~~**Storage vendor**~~ — Supabase Storage (paired with Supabase Postgres for single-vendor simplicity).
+2. ~~**Hosting platform**~~ — Vercel.
+3. ~~**Production domain**~~ — hosting platform's default subdomain for the Phase 15 pilot; a real domain is deferred, not rejected.
+4. ~~**Legal review path**~~ — owner has a reviewer who can look at the consent language; a review packet needs to be prepared and routed to them (see below).
+5. ~~**Data retention policy**~~ — deferred to be decided alongside consent language, with the same reviewer.
+
+### Still open
+
+6. **Final transcription + AI analysis vendor confirmation.** A researched recommendation with current pricing has been delivered (AssemblyAI or Deepgram for transcription; Claude Haiku for analysis — see `docs/deployment.md`), but needs explicit sign-off and a funded API key for each before Phase 14 integration work starts.
+7. **Who is the real first admin(s)?** Name(s)/email(s) needed to create real production admin accounts per Section 2, item 5.
+8. **Recording-consent law jurisdiction check** — will be handled as part of the legal review (item 4 above) rather than separately, since it's the same reviewer and the same underlying consent-language question.
+9. **Pilot scope and timeline** — how many contributors, which campaigns, over what window, for the Phase 15 bounded pilot this launch is presumably in service of.
+
+Items 6-9 remain before Phase 14 can be considered fully authorized to start; items 1-5 are resolved and reflected in `docs/deployment.md` and `docs/decision-log.md` DL-008.
 
 ---
 

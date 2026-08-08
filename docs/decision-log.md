@@ -102,4 +102,20 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-008: Owner-approved production infrastructure — Vercel + Supabase (Postgres + Storage), default subdomain for the pilot
+
+**Decision:** Production hosting is Vercel, the database is Supabase Postgres, and media storage is Supabase Storage (not Cloudflare R2 or S3). The Phase 15 pilot launches on the hosting platform's default subdomain rather than a dedicated Camp Coleman domain.
+
+**Why:** Owner-approved during the Phase 13/14 hand-off conversation. Single-vendor simplicity (Postgres + Storage on the same Supabase project) was chosen over the lower-egress-cost Cloudflare R2 alternative; at this project's actual scale (`docs/cost-model.md` — a single-camp pilot, likely dozens to low hundreds of short recordings) the egress-cost difference between Supabase Storage and R2 is not material, so simplicity won over marginal cost optimization. A dedicated production domain was deliberately deferred — not needed for a bounded pilot and easy to add later without any code change (`APP_BASE_URL` is already the only place a domain is referenced).
+
+**Alternatives:** Cloudflare R2 for storage (no egress fees — the better choice at larger scale, revisit if usage grows well past pilot volume); AWS S3 (more mature ecosystem, more setup overhead, no clear advantage here); a real Camp Coleman domain from day one (deferred, not rejected).
+
+**Tradeoffs:** Supabase Storage's cached-egress pricing is worse than R2's zero-egress model, so if the admin review workflow turns out to be very re-watch-heavy at real scale, this should be revisited. Using the platform's default subdomain means the pilot URL isn't Camp Coleman-branded, which is a minor UX cost acceptable for an invitation-only pilot.
+
+**Revisit When:** Before scaling past a single-camp pilot, or if actual Supabase Storage egress costs turn out higher than the `docs/cost-model.md` estimate once real usage data exists.
+
+**Related, still open (not yet decided):** the specific transcription and AI-analysis vendors — the owner asked for a researched recommendation with current pricing rather than picking one now; see the vendor comparison delivered alongside this entry (search "vendor comparison" or ask for it if not readily found) and `docs/production-launch-checklist.md`. Data retention policy and legal review of the consent language were both deliberately deferred to run together — see `docs/privacy-and-consent.md` and the legal-review packet in `docs/legal-review-required.md`.
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*
