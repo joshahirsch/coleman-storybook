@@ -81,7 +81,7 @@ jobs:
       # from this job's own `env:` block (all throwaway CI values, not real
       # secrets) so e2e/global-setup.ts's `npm run db:seed` call doesn't
       # fail with "'.env.local: not found".
-      - name: Write .env.local for CI (throwaway values, see job env: block)
+      - name: "Write .env.local for CI (throwaway values, see job env block)"
         run: |
           cat > .env.local <<EOF
           DATABASE_URL=${DATABASE_URL}
