@@ -3,7 +3,7 @@
 | Phase | Status | Result | Blockers | Next |
 |---|---|---|---|---|
 | 0 — Product & Brand Foundation | COMPLETE | Workspace scaffolded; campcoleman.org inspected (homepage, /alumni, /about-us); brand-audit.md, product-vision.md, decision-log.md, phase-status.md created. | None. No official Coleman brand guide supplied yet (tracked as an open item, not a blocker to proceeding). | Phase 1: Technical architecture, data model, security model. |
-| 1 — Architecture & Implementation Plan | NOT_STARTED | | | |
+| 1 — Architecture & Implementation Plan | COMPLETE | docs/architecture.md written: stack decision (Next.js/TS/Tailwind/Postgres/Supabase), component diagram, data model summary, dual state machines, upload flow, auth boundaries, threat model summary, test strategy, deployment topology. | None material. Vendor selection for transcription/AI deferred to Phases 8/9 by design (avoids requesting API keys before needed). | Phase 2: application scaffold, design system, brand tokens, routing (mock data acceptable at this phase). |
 | 2 — App Scaffold, Design System, Routing | NOT_STARTED | | | |
 | 3 — Database, Campaigns, Contributors, Consent | NOT_STARTED | | | |
 | 4 — Camera/Mic Recording UX | NOT_STARTED | | | |
