@@ -1,29 +1,42 @@
 /**
  * Consent copy and versioning.
  *
- * [LEGAL REVIEW REQUIRED] — the text below is DRAFT product-direction
- * language only, written by engineering to make the technical consent-
- * traceability system demonstrable. It has NOT been reviewed or approved by
- * Camp Coleman's counsel and must not be used with real contributors until
- * it is. See docs/legal-review-required.md.
+ * This text has NOT been reviewed or approved by counsel. The owner has
+ * explicitly decided to proceed with the current draft for the initial
+ * small, alumni-only MVP pilot without waiting for that review first — see
+ * docs/decision-log.md DL-010 for exactly what that decision does and does
+ * not mean, and docs/consent-legal-review-packet.md (still ready to send to
+ * a reviewer whenever the owner wants to circle back) for the full draft
+ * language and open legal questions.
+ *
+ * Earlier revisions of this file rendered a bracketed
+ * "[LEGAL REVIEW REQUIRED]" disclaimer and a literal "[Organization Name]"
+ * placeholder directly in the text shown to contributors — i.e. an actual
+ * contributor would have seen those brackets verbatim on screen, since
+ * nothing in the codebase ever substituted the placeholder (see git history
+ * / docs/decision-log.md DL-010 commit for the before/after). That was
+ * always wrong regardless of the legal-review question — a real user should
+ * never see raw placeholder tokens — and is fixed here: buildConsentText()
+ * takes the real organization name and interpolates it, and the
+ * review-status disclaimer now lives only in this comment and the decision
+ * log, not in what a contributor reads.
  */
 
-export const CURRENT_CONSENT_VERSION = "v1-draft-2026-08-08";
+export const CURRENT_CONSENT_VERSION = "v1-mvp-2026-08-08";
 
-export const CONSENT_TEXT = `
-By continuing, you agree to let [Organization Name] record, store, and use the video/audio
+export function buildConsentText(organizationName: string): string {
+  return `
+By continuing, you agree to let ${organizationName} record, store, and use the video/audio
 you provide, along with the answers and information you share, for the following purposes:
-sharing your story internally, considering it for use in [Organization Name]'s marketing,
+sharing your story internally, considering it for use in ${organizationName}'s marketing,
 fundraising, recruitment, and archival materials (online, in print, and in social media), and
-preserving it as part of [Organization Name]'s ongoing oral history.
+preserving it as part of ${organizationName}'s ongoing oral history.
 
 You do not have to share anything you are not comfortable sharing. You may stop recording at
-any time before you submit. [Organization Name] will not publish your story publicly without
+any time before you submit. ${organizationName} will not publish your story publicly without
 separate, explicit review and approval.
-
-[LEGAL REVIEW REQUIRED — draft only, not lawyer-approved. Placeholder pending counsel review;
-see docs/legal-review-required.md.]
 `.trim();
+}
 
 export const PERMITTED_USE_CLASSIFICATIONS = [
   { value: "internal_review_only", label: "Internal review only (no external use)" },

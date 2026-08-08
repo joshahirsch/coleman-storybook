@@ -1,6 +1,6 @@
 # Privacy and Consent
 
-**This document is a technical/product description of how consent is captured and traced through the system. It is not legal advice, and the consent language it describes has not been reviewed by Camp Coleman's counsel. See `docs/legal-review-required.md` for the full list of items requiring legal sign-off before any real contributor is invited.**
+**This document is a technical/product description of how consent is captured and traced through the system. It is not legal advice, and the consent language it describes has not been reviewed by Camp Coleman's counsel. The owner has explicitly decided to proceed with the MVP pilot without waiting for that review (see `docs/decision-log.md` DL-010) — this note is not a launch blocker, but the underlying fact (no counsel review yet) is still true and still worth knowing. See `docs/legal-review-required.md` and `docs/consent-legal-review-packet.md` for what a future review should cover.**
 
 ## Principles
 
@@ -28,7 +28,7 @@ Analytics events (`analytics_events`) deliberately never contain testimonial con
 
 ## Consent text and permitted-use classifications
 
-The current draft consent text lives in `src/lib/consent.ts` (`CONSENT_TEXT`), explicitly marked `[LEGAL REVIEW REQUIRED]` inline and rendered to contributors with that same caveat implicitly resolved (the placeholder `[Organization Name]` tokens are replaced with the org's real name at render time; the legal-review status is not yet resolved and must be before real use). It is intentionally plain-language rather than formal legal boilerplate, on the theory that a real release should be both legally sound and something a camper's grandparent can actually understand — but "plain language" is not a substitute for counsel review, and this text must not be shown to a real contributor until that review happens.
+The current draft consent text lives in `src/lib/consent.ts` (`buildConsentText(organizationName)`), which interpolates the real organization name at render time — an earlier revision of this file had that backwards (a static `CONSENT_TEXT` constant with a literal, never-substituted `[Organization Name]` placeholder and an in-band `[LEGAL REVIEW REQUIRED]` bracket that would have shown verbatim to a real contributor; both were fixed alongside DL-010, see that file's header comment for the full story). It is intentionally plain-language rather than formal legal boilerplate, on the theory that a real release should be both legally sound and something a camper's grandparent can actually understand — but "plain language" is not a substitute for counsel review. The owner has decided to proceed without that review for the initial MVP pilot (DL-010); this text is not yet counsel-reviewed and that fact is tracked there, not hidden.
 
 Contributors additionally choose a **permitted-use classification** at consent time (`src/lib/consent.ts`, `PERMITTED_USE_CLASSIFICATIONS`):
 

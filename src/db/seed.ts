@@ -262,7 +262,7 @@ async function main() {
     await db.insert(consentRecords).values({
       submissionId: submission.id,
       consentVersion: CURRENT_CONSENT_VERSION,
-      consentTextReference: "docs/legal-review-required.md#draft-consent",
+      consentTextReference: "src/lib/consent.ts (buildConsentText) — see docs/decision-log.md DL-010",
       permittedUseClassification: opts.permittedUse,
       acceptanceIpHash: "seed-synthetic-no-ip",
       userAgent: "seed-script",

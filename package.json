@@ -12,6 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx --env-file=.env.local src/db/seed.ts",
     "admin:create": "tsx --env-file=.env.local src/scripts/create-admin.ts",
     "jobs:process": "tsx --env-file=.env.local src/scripts/process-jobs.ts"

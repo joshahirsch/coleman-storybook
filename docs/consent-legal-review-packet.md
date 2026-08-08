@@ -3,13 +3,15 @@
 **Prepared for: Camp Coleman's counsel / designated legal reviewer.**
 **Prepared by: engineering, as a technical description of what the product does and the exact language it currently shows — not as a legal opinion. Nothing below should be treated as lawyer-approved until you say so.**
 
+**Status note:** the owner has decided to launch a small, alumni-only MVP pilot using the draft language below before this review happens (see `docs/decision-log.md` DL-010) — that's a deliberate, informed risk-acceptance decision for a bounded pilot, not a signal that review is no longer wanted. This packet remains exactly what's needed whenever you're able to look at it.
+
 ## What this product does, briefly
 
 Coleman Storybook invites Camp Coleman alumni, staff, parents, and volunteers to record short video/audio answers to guided questions about their camp experience. Before recording anything, a contributor is shown the consent text below and must affirmatively accept it, along with choosing how their story may be used (see "Permitted use classifications" below). Recordings and consent records are stored privately; nothing is made public without a separate internal review step. Contributors must self-attest they are adults; there is currently no pathway for minors to contribute.
 
 ## The exact current draft consent text
 
-This is DRAFT, placeholder language written by engineering to make the technical consent-tracking system demonstrable — it has not been reviewed by anyone with legal training. `[Organization Name]` is replaced with "Camp Coleman" (or whatever the org's configured name is) when actually shown to a contributor.
+This is DRAFT language written by engineering to make the technical consent-tracking system demonstrable — it has not been reviewed by anyone with legal training. `[Organization Name]` below is a stand-in for whatever this document shows for clarity; in the actual product it's replaced with the real organization name ("URJ Camp Coleman") wherever the text is shown to a contributor.
 
 > By continuing, you agree to let [Organization Name] record, store, and use the video/audio you provide, along with the answers and information you share, for the following purposes: sharing your story internally, considering it for use in [Organization Name]'s marketing, fundraising, recruitment, and archival materials (online, in print, and in social media), and preserving it as part of [Organization Name]'s ongoing oral history.
 >

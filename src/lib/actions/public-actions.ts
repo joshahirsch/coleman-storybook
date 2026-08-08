@@ -19,7 +19,7 @@ import {
 } from "@/lib/data/submissions";
 import { enqueueTranscriptionJobs } from "@/lib/data/processing";
 import { isProcessingPipelineEnabled } from "@/lib/providers/transcription";
-import { CURRENT_CONSENT_VERSION, CONSENT_TEXT } from "@/lib/consent";
+import { CURRENT_CONSENT_VERSION, buildConsentText } from "@/lib/consent";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate-limit";
 import { hashIp } from "@/lib/hash";
 import { logAuditEvent, trackAnalyticsEvent } from "@/lib/audit";
@@ -97,7 +97,7 @@ export async function startSubmissionAction(
     recordingMode: campaign.recordingMode,
     maxDurationSeconds: campaign.maxDurationSeconds,
     consentVersion: campaign.consentVersion,
-    consentText: CONSENT_TEXT,
+    consentText: buildConsentText(org.name),
     answers: answerPrompts,
   };
 }
@@ -133,7 +133,7 @@ export async function submitConsentAction(input: {
   await recordConsent({
     submissionId: parsed.data.submissionId,
     consentVersion: parsed.data.consentVersion,
-    consentTextReference: "docs/legal-review-required.md#draft-consent",
+    consentTextReference: "src/lib/consent.ts (buildConsentText) — see docs/decision-log.md DL-010",
     permittedUseClassification: parsed.data.permittedUseClassification,
     acceptanceIpHash: hashIp(ip),
     userAgent: hdrs.get("user-agent"),

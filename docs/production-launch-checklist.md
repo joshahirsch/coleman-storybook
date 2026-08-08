@@ -14,6 +14,8 @@
 - A provider-abstraction architecture specifically designed so that closing the remaining gaps (below) is contained, scoped engineering work, not a redesign.
 - A non-destructive, idempotent script to create the real first admin account (`npm run admin:create`), verified end-to-end against local Postgres — see Section 2, item 5.
 - CI (`.github/workflows/ci.yml`) running typecheck, lint, unit tests, `npm audit --audit-level=high`, and the full Playwright E2E suite against a real Postgres service container on every push/PR to `main`.
+- Versioned database migrations (`npm run db:generate` / `npm run db:migrate`), initial migration committed and verified, CI exercises it on every push — see Section 2, item 4.
+- A clean production build (`npm run build`) — verified locally, compiles and type-checks with no errors.
 - Full documentation set: product vision, brand audit, architecture, data model, security, privacy/consent, decision log, testing, deployment, cost model, this checklist.
 
 ## 2. What is NOT ready — concrete engineering work required before Phase 14
@@ -23,7 +25,7 @@ These are not "nice to haves" — without them, "deploy to production" is not ac
 1. **The Supabase Storage media adapter exists but is unverified.** `src/lib/storage/supabase-adapter.ts` is written against Supabase's documented SDK methods, but has never run against a live bucket (no credentials exist in this environment) and has one explicitly flagged open question (the raw-HTTP upload contract for a signed-upload token isn't fully documented by Supabase; the client-side upload code may need a Supabase-specific path using their SDK's `uploadToSignedUrl()` rather than the current generic XHR PUT). **This must be smoke-tested end-to-end against a real bucket early in Phase 14**, before relying on it for real contributor uploads. This is the one item on this list that's still a hard blocker for launch.
 2. ~~Transcription provider~~ — **not needed for this launch.** Owner decision (DL-009): hold off on any paid transcription/AI vendor for the initial POC. Set `TRANSCRIPTION_PROVIDER=none` in production (not `fake` — see `.env.example` and DL-009 for why that distinction matters). The vendor recommendation researched earlier (AssemblyAI/Deepgram + Claude Haiku, `docs/deployment.md`) is preserved for when this is revisited post-POC.
 3. ~~AI story-analysis provider~~ — same as above, not needed for this launch.
-4. **Drizzle's migration workflow should switch from `push` to versioned migrations** (`drizzle-kit generate` + `drizzle-kit migrate`) before a production database exists, so schema changes are reviewable and reversible. See `docs/deployment.md`.
+4. ~~Drizzle's migration workflow should switch from `push` to versioned migrations~~ — **done (DL-011).** `npm run db:generate` + `npm run db:migrate` now exist alongside the local-dev-only `db:push`; the initial migration is committed (`drizzle/0000_zippy_cargill.sql`) and verified against a fresh database, and CI's `e2e` job runs `db:migrate` (not `db:push`) so every migration is exercised before merge. See `docs/deployment.md`.
 5. ~~Real first-admin creation~~ — **script ready, not yet run.** Identity confirmed: **Josh Hirsch, josh.hirsch@gmail.com**. `src/db/seed.ts` creates a dev-only admin and must never touch production (enforced by the `assertNotProduction()` guard from the Phase 12 review). The real account is created with a separate, non-destructive script: `src/scripts/create-admin.ts` (`npm run admin:create`). It does a single targeted insert/update on `admin_users`, generates and prints a strong random password once (or accepts one via `ADMIN_PASSWORD`), is safe to re-run (updates the existing row by email instead of erroring or duplicating), and refuses to guess which organization to attach the admin to if more than one exists. Verified end-to-end against local Postgres (create, idempotent re-run, explicit `--reset-password`, and the missing-args error path all behave as documented). Once a production database exists:
    ```
    ADMIN_EMAIL="josh.hirsch@gmail.com" ADMIN_NAME="Josh Hirsch" npm run admin:create
@@ -55,7 +57,7 @@ See `.env.example` for the authoritative source. Every variable below needs a **
 - [ ] Scheduled job runner: **not needed for this launch** with `TRANSCRIPTION_PROVIDER=none` — no processing jobs are ever enqueued, so there's nothing for `/api/jobs/process` to do. Skip setting up Vercel Cron until transcription/AI is revisited post-POC.
 - [ ] Domain/DNS: hosting platform's default subdomain (decided, DL-008) — no action needed beyond noting the resulting URL.
 - [ ] All environment variables from Section 3 set in the hosting platform's secret store (never committed to the repo) — note `TRANSCRIPTION_PROVIDER=none`, not `fake`.
-- [ ] `npm run db:push` (or, if migrations have been switched to versioned by then, `drizzle-kit migrate`) run once against the real production database to create the schema.
+- [ ] `npm run db:migrate` run once against the real production database to create the schema (versioned migrations — see Section 2, item 4. Do not use `db:push` against production).
 - [ ] Real first-admin account created for Josh Hirsch (josh.hirsch@gmail.com) — run `npm run admin:create` per Section 2, item 5.
 - [x] `npm audit --audit-level=high` now runs automatically on every push/PR to `main` via `.github/workflows/ci.yml` (see `docs/pre-production-review.md` P3-2 — fixed). No action needed here beyond keeping CI green; a new high/critical finding will fail the build.
 
@@ -70,7 +72,7 @@ Delegated to the managed Postgres provider's automated backups — confirm they'
 ## 7. Rollback procedure
 
 - **Application code:** the hosting platform's built-in deployment rollback (e.g. Vercel's instant rollback to the previous build).
-- **Database schema:** until migrations are switched to the versioned workflow (Section 2, item 4), a `pg_dump` snapshot immediately before any production schema change is the safety net. After the switch, `drizzle-kit migrate` provides a reviewable, revertible migration history.
+- **Database schema:** versioned migrations are now in place (Section 2, item 4) — `npm run db:generate` gives a reviewable diff before any schema change ships. A `pg_dump` snapshot immediately before applying a migration in production remains the safety net of last resort, since Drizzle doesn't generate an automatic down-migration.
 
 ## 8. Production smoke test (run once, immediately after deploy, before announcing to anyone)
 
@@ -94,17 +96,17 @@ Delegated to the managed Postgres provider's automated backups — confirm they'
 6. ~~**Transcription + AI analysis vendor**~~ — explicitly deferred until after the POC, to keep initial cost at zero. `TRANSCRIPTION_PROVIDER=none` in production. DL-009.
 7. ~~**Who is the real first admin?**~~ — Josh Hirsch, josh.hirsch@gmail.com. DL-009.
 8. ~~**Pilot scope**~~ — small, alumni-only, "a handful of contributors" to prove the concept before expanding scope. No fixed timeline attached; expansion happens after POC validation, not on a calendar date. DL-009.
+9. ~~**Legal reviewer's sign-off & recording-consent jurisdiction check**~~ — owner explicitly decided to proceed with the MVP pilot without waiting for these ("pass on the legal review for now, this is just an MVP version"). The consent flow itself is fully built and unchanged; what's deferred is external counsel review of the specific draft language. Real, accepted risk — see DL-010 for exactly what this does and doesn't mean, and when to revisit it (before expanding past the initial small pilot). The packet (`docs/consent-legal-review-packet.md`) stays ready to send whenever the owner wants to circle back.
+10. ~~**Database migration workflow**~~ — switched from `db:push` to versioned migrations (`db:generate`/`db:migrate`), initial migration committed and verified, CI now exercises it. DL-011.
 
 ### Still open
 
-9. **Recording-consent law jurisdiction check** — will be handled as part of the legal review (item 4) rather than separately, since it's the same reviewer and the same underlying consent-language question.
-10. **Legal reviewer's actual sign-off** — packet delivered; awaiting the review itself.
 11. **Supabase storage adapter smoke test** — genuinely can't be done without a real bucket; first thing to do once Supabase is provisioned (Section 2, item 1).
 
-Only items 9-11 remain before Phase 14 is fully clear to start — and 9 rides along with 10, so realistically it's the legal review landing and the storage adapter getting smoke-tested against a real bucket.
+Item 11 — the storage adapter smoke test — is now the only thing standing between here and Phase 14, and it requires a real Supabase bucket to exist first.
 
 ---
 
 ## Summary for the owner
 
-The application itself is built, tested, and reviewed. With transcription/AI explicitly deferred and the infra stack decided (Vercel + Supabase, no dedicated domain yet), the remaining path to a real POC launch is now short: provision Vercel + Supabase, smoke-test the (already-written) storage adapter against the real bucket, create Josh Hirsch's real admin account, and get the consent-language packet back from your legal reviewer. No further product decisions are blocking — this is now primarily execution, pending your go-ahead to actually provision production infrastructure (Phase 14).
+The application itself is built, tested, and reviewed — CI now runs the full check suite automatically on every push, database migrations are versioned and committed, and a production build compiles cleanly. With transcription/AI explicitly deferred, the infra stack decided (Vercel + Supabase, no dedicated domain yet), and legal review consciously deferred for the MVP pilot (DL-010), the remaining path to a real POC launch is now just: provision Vercel + Supabase, run `npm run db:migrate` against the real database, smoke-test the (already-written) storage adapter against the real bucket, and run `npm run admin:create` for Josh Hirsch's real account. No further product or process decisions are blocking — this is now purely execution, pending your go-ahead to actually provision production infrastructure (Phase 14).

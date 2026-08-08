@@ -2,9 +2,11 @@
 
 **This document is not legal advice and nothing in this repository should be treated as lawyer-approved language until Camp Coleman's counsel (or the owner's designated legal reviewer) has reviewed and signed off.** Engineering will implement technical support for whatever consent/privacy model is approved, but will not draft or claim final legal language.
 
-## Items Requiring Legal Review Before Real (Non-Synthetic) Use
+**Update, DL-010:** the owner has explicitly decided to proceed with the initial small, alumni-only MVP pilot without waiting for this review ("pass on the legal review for now, this is just an MVP version") — see `docs/decision-log.md` DL-010 for exactly what that decision does and doesn't mean. None of the items below have actually been resolved by that decision; the owner made an informed choice to accept the risk for a bounded pilot rather than wait. This list, and the packet in `docs/consent-legal-review-packet.md`, remain accurate and ready whenever review is revisited (recommended before expanding past the initial pilot — see DL-009/DL-010).
 
-1. **Testimonial / media release language.** Coleman Storybook will ship with clearly-labeled DRAFT consent copy (see `docs/privacy-and-consent.md` once written in Phase 3) for engineering/testing purposes only. It must not be used with real contributors until reviewed and approved.
+## Items Worth Legal Review (owner has deferred, not resolved — see DL-010)
+
+1. **Testimonial / media release language.** Coleman Storybook ships with clearly-labeled DRAFT consent copy (`docs/privacy-and-consent.md`) for the MVP pilot. It has not been reviewed or approved by counsel; the owner has decided to use it anyway for the initial small pilot (DL-010).
 2. **Privacy policy.** No privacy policy currently exists for this product. One is required before any real-user pilot (Phase 15).
 3. **Data retention policy.** How long submitted video, transcripts, and AI-derived metadata are retained, and under what conditions they are deleted, is undefined.
 4. **Withdrawal / revocation rights.** Whether and how a contributor can withdraw consent after submission, and what happens to already-published derivative content if they do, is undefined.
@@ -17,8 +19,8 @@
 
 ## Process
 
-Engineering will flag every place in the product where legally-reviewed copy is required with a visible `[LEGAL REVIEW REQUIRED]` marker in source comments and, where user-facing, a note in the admin-only configuration UI (not shown to contributors) until approved language replaces the draft.
+Engineering flags every place in the product where legally-reviewed copy is required with a review-status note in source comments (`src/lib/consent.ts`) and this document — never as a bracketed disclaimer rendered to contributors themselves, since a real user should never see raw placeholder/review-status text on screen.
 
 ## Status
 
-No items on this list have been reviewed or approved as of 2026-08-08. This is expected at Phase 0 and is not a blocker to continued engineering work through Phase 13 (all pre-production phases), but it IS a hard blocker to Phase 14 (production deploy) and Phase 15 (real-user pilot).
+No items on this list have been reviewed or approved as of 2026-08-08. This is expected at Phase 0 and is not a blocker to continued engineering work through Phase 13 (all pre-production phases). It was originally treated as a hard blocker to Phase 14/15 as well, until the owner explicitly decided otherwise for the initial MVP pilot (DL-010, 2026-08-08) — see that entry for the exact scope of what's deferred versus what still stands (the consent *mechanism* is unchanged and still required; only "reviewed by counsel" is deferred). Still strongly recommended before expanding beyond the initial small alumni pilot.

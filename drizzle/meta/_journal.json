@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786231617917,
+      "tag": "0000_zippy_cargill",
+      "breakpoints": true
+    }
+  ]
+}

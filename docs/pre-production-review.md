@@ -28,7 +28,7 @@ Not a code defect — the interfaces are correctly designed to make this a conta
 
 ### P2-3: Consent language and privacy practices have not been reviewed by counsel
 
-Tracked in detail in `docs/legal-review-required.md` and `docs/privacy-and-consent.md`. Restated here because it is the single largest open item standing between this system and real contributor use — everything else in this review is a code-level concern, this one is not resolvable by engineering at all.
+Tracked in detail in `docs/legal-review-required.md` and `docs/privacy-and-consent.md`. Restated here because it was, until the owner's DL-010 decision, the single largest open item standing between this system and real contributor use — everything else in this review is a code-level concern, this one was never resolvable by engineering at all. The owner has since explicitly decided to proceed with the MVP pilot without waiting for this review (DL-010) — noted here for completeness, not because the underlying gap (no counsel review yet) has actually closed.
 
 ## P3 — Minor, worth doing eventually
 

@@ -40,7 +40,7 @@ This document describes the security posture of the system as actually built, no
 - **No MFA, password reset, or session revocation list for admin accounts.** A stolen JWT is valid until its 8-hour natural expiry; there is no way to force-invalidate a specific session early. First-admin credentials must be rotated out of band if ever suspected compromised (kill the session secret to invalidate all sessions at once, as a blunt instrument). See `docs/decision-log.md` DL-007.
 - **No Web Application Firewall / DDoS layer is implemented by this codebase** — relies on whatever the hosting platform provides (e.g. Vercel's edge network).
 - **No automated dependency vulnerability scanning is wired into CI yet** — `npm audit` should be run manually before each deploy until this is automated (tracked in `docs/production-launch-checklist.md`).
-- **Consent language has not been reviewed by counsel.** This is a legal/product risk, not a security one per se, but is flagged here because it affects what "authorized use" of contributor media actually means — see `docs/legal-review-required.md` and `docs/privacy-and-consent.md`.
+- **Consent language has not been reviewed by counsel.** This is a legal/product risk, not a security one per se, but is flagged here because it affects what "authorized use" of contributor media actually means — see `docs/legal-review-required.md` and `docs/privacy-and-consent.md`. The owner has explicitly decided to proceed with the MVP pilot ahead of that review (`docs/decision-log.md` DL-010) — the risk itself is unchanged, just knowingly accepted for a small, bounded pilot rather than deferred indefinitely.
 
 ## Reporting
 

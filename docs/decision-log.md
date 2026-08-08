@@ -134,4 +134,36 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-010: Owner accepts the risk of launching the MVP pilot without formal legal review of consent language
+
+**Decision:** The owner has explicitly decided to proceed with the current draft consent language (`docs/consent-legal-review-packet.md`) for the initial small, alumni-only MVP pilot, without waiting for a lawyer's sign-off first. Recording-consent jurisdiction analysis, which was riding along with the legal review, is deferred the same way.
+
+**Why:** Owner instruction: "pass on the legal review for now. this is just an MVP version." Given the pilot's actual shape — a handful of alumni the organization already has a relationship with, invited individually, not a public open call — the owner judged the exposure acceptable to start validating the product concept now rather than wait on an external reviewer's timeline.
+
+**What this does NOT change:** every consent mechanism already built stays exactly as-is — a real, explicit consent step is still required before any recording begins, the exact consent text and version are still stored per-submission (`consent_records`, see `docs/data-model.md`), the acceptance IP is still hashed and timestamped, and no submission can proceed without recorded consent. This decision only removes "an external lawyer has reviewed this specific language" as a precondition of launch — it does not weaken, skip, or stub out the consent flow itself.
+
+**What is explicitly NOT resolved by this decision, and remains true:** the draft consent language and permitted-use classifications in `docs/consent-legal-review-packet.md` have still not been reviewed by counsel, and no jurisdiction-specific recording-consent law analysis has been done. Claude is not a lawyer and this project log is not legal advice — this is a record of the owner's own risk-acceptance decision, not a claim that the current consent language is legally sufficient. The packet remains ready to send to a reviewer whenever the owner wants to revisit this.
+
+**Alternatives:** Wait for legal review before any real pilot submission (rejected by the owner — see above); have Claude assess legal sufficiency directly (not something Claude is positioned to do — see `docs/consent-legal-review-packet.md`'s own framing, which was written to be handed to an actual lawyer, not to substitute for one).
+
+**Tradeoffs:** Real, unquantified legal risk during the pilot window — the draft consent text was written to be thorough and directionally sound, but "thorough and directionally sound" is not the same as "reviewed by counsel for this specific jurisdiction and use case." This is a deliberate, informed tradeoff the owner made explicitly, not an oversight.
+
+**Revisit When:** Before expanding beyond the initial small alumni pilot (see DL-009's pilot-scope decision) — the same "no fixed timeline, expand after POC validation" logic that governs scope expansion should also govern when legal review actually happens. Strongly recommended before any public-facing or larger-scale launch, and before recording testimonials from anyone the organization doesn't already have a direct, trusted relationship with.
+
+---
+
+## DL-011: Switch database schema management from `drizzle-kit push` to versioned migrations
+
+**Decision:** Added `npm run db:generate` (`drizzle-kit generate`) and `npm run db:migrate` (`drizzle-kit migrate`) alongside the existing `npm run db:push`. The initial migration (`drizzle/0000_zippy_cargill.sql`, all 18 tables) is generated from the current `src/db/schema.ts` and committed. CI's `e2e` job now runs `db:migrate` instead of `db:push` to set up its test database.
+
+**Why:** This was flagged as required-before-Phase-14 work in `docs/production-launch-checklist.md` Section 2 item 4 from the Phase 12 review onward: `db:push` applies the current schema state directly with no reviewable diff and no history, which is fine for solo local iteration but not for a real deployed environment where a schema change should be a reviewable, revertible artifact (a committed SQL file), not something computed fresh against whatever the live database happens to look like at deploy time. This is pure engineering work with no dependency on production credentials, so it was done proactively rather than left for Phase 14.
+
+**Alternatives:** Keep using `db:push` all the way through production (rejected — the exact risk this decision avoids, already documented as a known gap since the Phase 12 review); switch immediately and remove `db:push` entirely (rejected — `db:push` is still genuinely useful for fast local schema iteration during ongoing development, and removing it doesn't reduce production risk since production was never going to use it once migrations exist).
+
+**Tradeoffs:** One extra step in the schema-change workflow going forward — a schema change destined for a real environment now needs `db:generate` (review the SQL, commit it) before `db:migrate` applies it, rather than `db:push` doing both in one step. Verified end-to-end against local Postgres: generating the initial migration, applying it to a fresh empty database, and seeding the result all worked cleanly with no manual intervention.
+
+**Revisit When:** Not expected to be revisited — this is the intended steady-state workflow. If `db:push` is ever run against a real deployed database by mistake, that's an operator error to guard against procedurally (see `docs/production-launch-checklist.md`), not a reason to reconsider this decision.
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*

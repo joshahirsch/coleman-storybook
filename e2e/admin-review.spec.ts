@@ -34,7 +34,11 @@ test("admin can log in, search, review, and the consent trace stays attached", a
   // Open a submission and verify the consent trace + AI metadata are visible.
   await page.getByRole("link", { name: "Open" }).first().click();
   await expect(page.getByRole("heading", { name: "Consent" })).toBeVisible();
-  await expect(page.getByText(/Version: v1-draft/)).toBeVisible();
+  // Match the "v1-" prefix rather than hardcoding the full CURRENT_CONSENT_VERSION
+  // string from src/lib/consent.ts, so a future version bump (e.g. after a real
+  // legal review lands — see docs/decision-log.md DL-010) doesn't silently break
+  // this assertion for an unrelated reason.
+  await expect(page.getByText(/Version: v1-/)).toBeVisible();
   await expect(page.getByText(/SYNTHETIC — not a real (transcript|AI analysis)/).first()).toBeVisible();
 
   // Editorial approve + favorite persist across reload.

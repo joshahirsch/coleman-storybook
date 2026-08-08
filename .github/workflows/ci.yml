@@ -95,7 +95,11 @@ jobs:
           APP_BASE_URL=${APP_BASE_URL}
           NODE_ENV=${NODE_ENV}
           EOF
-      - run: npm run db:push
+      # Apply the checked-in versioned migrations (drizzle/*.sql), not
+      # db:push — this both sets up the fresh CI database and, as a side
+      # effect, verifies every migration file actually applies cleanly
+      # before it can reach main. See docs/decision-log.md DL-011.
+      - run: npm run db:migrate
       - run: npm run test:e2e
       - if: always()
         uses: actions/upload-artifact@v4
