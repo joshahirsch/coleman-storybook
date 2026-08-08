@@ -13,7 +13,7 @@ function StateBadge({ state }: { state: string }) {
     PROCESSING: "bg-amber-100 text-amber-800",
     READY_FOR_REVIEW: "bg-green-100 text-green-800",
     PROCESSING_FAILED: "bg-red-100 text-red-800",
-    WITHDRAWN: "bg-gray-100 text-gray-500",
+    WITHDRAWN: "bg-gray-100 text-gray-600",
   };
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[state] ?? "bg-gray-100 text-gray-700"}`}>
@@ -53,7 +53,7 @@ export default async function AdminDashboardPage({
     <main className="mx-auto min-h-screen max-w-5xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Coleman Storybook — Admin</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-600">Coleman Storybook — Admin</p>
           <h1 className="mt-1 text-2xl font-semibold text-gray-900">Story Library</h1>
         </div>
         <div className="flex items-center gap-3 text-sm text-gray-600">
@@ -105,20 +105,20 @@ export default async function AdminDashboardPage({
           Apply
         </button>
         {(params.q || params.campaign || params.editorial || params.favorite) && (
-          <Link href="/admin/dashboard" className="text-sm text-gray-500 underline">
+          <Link href="/admin/dashboard" className="text-sm text-gray-600 underline">
             Clear filters
           </Link>
         )}
       </form>
 
       {submissions.length === 0 ? (
-        <p className="rounded-md border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
+        <p className="rounded-md border border-dashed border-gray-300 p-8 text-center text-sm text-gray-600">
           No submissions match these filters.
         </p>
       ) : (
         <div className="overflow-hidden rounded-md border border-gray-200">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-600">
               <tr>
                 <th className="px-4 py-2">Contributor</th>
                 <th className="px-4 py-2">Campaign</th>
@@ -135,10 +135,10 @@ export default async function AdminDashboardPage({
                     <div className="font-medium text-gray-900">
                       {s.contributorName} {s.favorite && <span title="Favorited">★</span>}
                     </div>
-                    <div className="text-xs text-gray-500">{s.relationship.replace(/_/g, " ")}</div>
+                    <div className="text-xs text-gray-600">{s.relationship.replace(/_/g, " ")}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{s.campaignTitle}</td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-gray-600">
                     {s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : "—"}
                   </td>
                   <td className="px-4 py-3">

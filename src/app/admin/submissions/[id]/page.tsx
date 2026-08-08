@@ -29,7 +29,7 @@ export default async function SubmissionDetailPage({ params }: { params: Promise
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-8">
-      <Link href="/admin/dashboard" className="text-sm text-gray-500 underline">
+      <Link href="/admin/dashboard" className="text-sm text-gray-600 underline">
         ← Back to library
       </Link>
 
@@ -43,7 +43,7 @@ export default async function SubmissionDetailPage({ params }: { params: Promise
               </span>
             )}
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-600">
             {contributor?.relationship.replace(/_/g, " ")} · {contributor?.yearsAssociated ?? "years not provided"} ·{" "}
             {campaign?.title}
           </p>
@@ -65,7 +65,6 @@ export default async function SubmissionDetailPage({ params }: { params: Promise
                   {answer.mediaAssets.map((m) => (
                     <div key={m.id} className="mt-2">
                       {m.playbackUrl ? (
-                        // eslint-disable-next-line jsx-a11y/media-has-caption
                         <video src={m.playbackUrl} controls className="w-full max-w-md rounded-md bg-black" />
                       ) : (
                         <p className="text-xs text-gray-400">
@@ -112,7 +111,7 @@ export default async function SubmissionDetailPage({ params }: { params: Promise
                 </div>
                 {Array.isArray(analysis.pullQuotes) && analysis.pullQuotes.length > 0 && (
                   <div className="mt-3">
-                    <p className="text-xs font-medium uppercase text-gray-500">Pull quotes</p>
+                    <p className="text-xs font-medium uppercase text-gray-600">Pull quotes</p>
                     <ul className="mt-1 flex flex-col gap-1">
                       {(analysis.pullQuotes as { text: string }[]).map((q, i) => (
                         <li key={i} className="border-l-2 border-gray-300 pl-2 text-sm italic text-gray-700">
@@ -124,7 +123,7 @@ export default async function SubmissionDetailPage({ params }: { params: Promise
                 )}
                 {analysis.marketingUseSuggestions.length > 0 && (
                   <div className="mt-3">
-                    <p className="text-xs font-medium uppercase text-gray-500">Marketing use suggestions</p>
+                    <p className="text-xs font-medium uppercase text-gray-600">Marketing use suggestions</p>
                     <ul className="mt-1 list-disc pl-5 text-sm text-gray-700">
                       {analysis.marketingUseSuggestions.map((s, i) => (
                         <li key={i}>{s}</li>

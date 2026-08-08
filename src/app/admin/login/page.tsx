@@ -11,7 +11,7 @@ export default function AdminLoginPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Coleman Storybook</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-600">Coleman Storybook</p>
         <h1 className="mt-1 text-2xl font-semibold text-gray-900">Staff sign in</h1>
       </div>
 
@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
         </button>
       </form>
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-gray-600">
         This area is restricted to authorized Camp Coleman staff. No public access to submissions or media.
       </p>
     </main>

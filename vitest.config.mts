@@ -1,5 +1,8 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Unit tests use *.test.ts (not *.spec.ts, which is reserved for Playwright
 // E2E specs under e2e/ — see playwright.config.ts) to keep the two runners
@@ -11,7 +14,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(dirname, "./src"),
     },
   },
 });

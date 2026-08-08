@@ -649,7 +649,6 @@ export function ContributorFlow({
 
           <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
             {recordingState === "recorded" && reviewUrl ? (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
               <video src={reviewUrl} className="h-full w-full object-cover" controls playsInline />
             ) : (
               <video ref={videoPreviewRef} className="h-full w-full object-cover" muted playsInline />

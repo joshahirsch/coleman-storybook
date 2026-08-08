@@ -280,9 +280,16 @@ async function main() {
 
       const shouldTranscribe = opts.targetState !== "PROCESSING_FAILED" || i === 0;
       if (shouldTranscribe) {
+        // Deterministic per (contributor, question index) rather than the
+        // real (randomly-generated) storage key, so re-running the seed
+        // script always assigns the same synthetic story to the same
+        // synthetic contributor — otherwise dev/demo/QA content shuffles on
+        // every reseed, which is confusing and makes fixture-dependent
+        // tests flaky. The real pipeline (src/lib/job-runner.ts) still
+        // keys on the actual storage key, as it should.
         const transcriptionResult = await fakeTranscriptionProvider.transcribe({
           mediaUrl: key,
-          mediaKey: `${key}:${answer.id}`,
+          mediaKey: `seed:${opts.first}:${opts.last}:${i}`,
         });
         await db.insert(transcripts).values({
           mediaAssetId: asset.id,

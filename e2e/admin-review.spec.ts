@@ -18,8 +18,16 @@ test("admin can log in, search, review, and the consent trace stays attached", a
   await expect(page.getByText("Sarah Cohen")).toBeVisible();
   await expect(page.getByText("Rachel Stein")).toBeVisible();
 
-  // Text search against transcripts (Postgres FTS/ILIKE — Phase 10)
-  await page.getByLabel("Search transcripts/names").fill("friend");
+  // Name search (Phase 10) — stable regardless of which synthetic story a
+  // seeded contributor was deterministically assigned.
+  await page.getByLabel("Search transcripts/names").fill("cohen");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page.getByText("Sarah Cohen")).toBeVisible();
+  await expect(page.getByText("Rachel Stein")).toHaveCount(0);
+
+  // Transcript full-text search (Postgres FTS/ILIKE) — every seeded
+  // READY_FOR_REVIEW contributor's synthetic transcripts mention Coleman.
+  await page.getByLabel("Search transcripts/names").fill("coleman");
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page.getByText("Sarah Cohen")).toBeVisible();
 
