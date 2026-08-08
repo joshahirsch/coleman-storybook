@@ -18,6 +18,7 @@ import {
   transitionSubmission,
 } from "@/lib/data/submissions";
 import { enqueueTranscriptionJobs } from "@/lib/data/processing";
+import { isProcessingPipelineEnabled } from "@/lib/providers/transcription";
 import { CURRENT_CONSENT_VERSION, CONSENT_TEXT } from "@/lib/consent";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate-limit";
 import { hashIp } from "@/lib/hash";
@@ -183,7 +184,16 @@ export async function finalizeSubmissionAction(submissionId: string): Promise<Fi
 
   await transitionSubmission(submissionId, "SUBMITTED");
   await transitionSubmission(submissionId, "PROCESSING");
-  await enqueueTranscriptionJobs(submissionId);
+
+  if (isProcessingPipelineEnabled()) {
+    await enqueueTranscriptionJobs(submissionId);
+  } else {
+    // No transcription/AI vendor configured (owner decision, DL-009) — skip
+    // straight to READY_FOR_REVIEW. Admins review the raw recording
+    // directly; no transcript/analysis is fabricated. See
+    // src/lib/providers/transcription/index.ts.
+    await transitionSubmission(submissionId, "READY_FOR_REVIEW");
+  }
 
   await trackAnalyticsEvent({ eventType: "submission_completed", submissionId });
   await logAuditEvent({

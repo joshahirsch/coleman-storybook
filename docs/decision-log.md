@@ -118,4 +118,20 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-009: Defer paid transcription/AI vendors until after POC; run the pipeline in "none" mode for the initial pilot
+
+**Decision:** For the initial POC (a small, alumni-only pilot), `TRANSCRIPTION_PROVIDER` is set to `"none"` in production, not `"fake"`. This fully disables the transcription/AI-analysis processing pipeline for real submissions — no processing job is ever enqueued, and the submission goes straight from `PROCESSING` to `READY_FOR_REVIEW`. Admins review the raw recording directly; no transcript or AI-derived themes/summary exist for real POC submissions.
+
+**Why:** The owner explicitly asked to hold off on transcription/AI to keep the POC at as close to zero marginal cost as possible, and to validate the core concept (will alumni actually record stories, will admins find reviewing them valuable) before spending anywhere. Critically, this is NOT the same as simply leaving `TRANSCRIPTION_PROVIDER` on its dev default of `"fake"`: doing that in production would run the deterministic synthetic provider against real contributor recordings, generating a fabricated, unrelated canned "story" transcript next to a real alumnus's real video. Even with the existing "SYNTHETIC" badge, that's a bad experience for a real pilot — the admin review UI would show made-up text ostensibly describing what a real person said. Adding an explicit `"none"` mode (rather than reusing `"fake"`) avoids ever letting synthetic content near real submission data, and costs nothing to build since editorial review (approve/reject/favorite/notes) already works entirely independently of whether a transcript exists, by design (see `docs/data-model.md` "Dual State Machines").
+
+**Alternatives:** Run `"fake"` in production and rely on the SYNTHETIC badge alone (rejected — confusing and low-integrity for a real pilot); build a real transcription/AI integration now (rejected — costs money and engineering time before the core concept is validated, and the owner explicitly said to hold off); leave the pipeline pointed at `"fake"` but hide the analysis panel in the admin UI for non-synthetic contributors (more code than just skipping the pipeline entirely, for the same outcome).
+
+**Tradeoffs:** During the POC, admins lose the searchable-transcript and AI-theme-filter conveniences for real submissions (video review is manual, one story at a time) — an acceptable cost for a "handful of alumni" pilot. Full-text search and theme filtering still work correctly for any synthetic/dev fixtures, unaffected.
+
+**Related:** the first real production admin is Josh Hirsch (josh.hirsch@gmail.com) — see `docs/production-launch-checklist.md` Section 2, item 5. The pilot scope is intentionally small (a handful of alumni contributors) with expansion only after proof-of-concept validation, not a fixed timeline.
+
+**Revisit When:** After the POC validates the core concept and the owner decides to fund a real transcription/AI vendor (recommendation already researched — see `docs/deployment.md` "Vendor recommendation") — at that point, switch `TRANSCRIPTION_PROVIDER` back to a real provider name; no other code changes needed since existing submissions simply have no transcript until the vendor is added (nothing needs to be reprocessed retroactively unless desired).
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*

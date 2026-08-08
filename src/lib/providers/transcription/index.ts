@@ -21,3 +21,21 @@ export function getTranscriptionProvider(): TranscriptionProvider {
       );
   }
 }
+
+/**
+ * Owner decision (docs/decision-log.md DL-009): hold off on a real
+ * transcription/AI vendor for the initial POC pilot to keep costs at zero.
+ * Setting TRANSCRIPTION_PROVIDER=none disables the processing pipeline
+ * entirely for real submissions — see the call site in
+ * src/lib/actions/public-actions.ts. This is deliberately NOT the same as
+ * leaving it on "fake": running the fake/synthetic provider against a real
+ * contributor's real recording would generate a fabricated, unrelated
+ * "SYNTHETIC" placeholder transcript next to their real video, which is
+ * misleading in a real review context even with the badge. "none" instead
+ * skips processing so admins review the raw recording directly — fully
+ * supported already since editorial review never depended on a transcript
+ * existing (docs/data-model.md "Dual State Machines").
+ */
+export function isProcessingPipelineEnabled(): boolean {
+  return (process.env.TRANSCRIPTION_PROVIDER ?? "fake") !== "none";
+}
