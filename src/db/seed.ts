@@ -180,6 +180,20 @@ async function main() {
     { campaignId: parentsCampaign.id, promptText: "What would you tell another parent considering Coleman?", order: 2 },
   ]);
 
+  // Inactive campaign fixture — used to test the "disabled campaign" path
+  // (spec Section 30 negative test list) and to demonstrate that campaigns
+  // can be deactivated without deleting their data.
+  await db.insert(campaigns).values({
+    organizationId: org.id,
+    slug: "friendships",
+    title: "Friendship Stories (not yet launched)",
+    description: "Reserved for a future themed campaign.",
+    heroHeadline: "Your Coleman story matters.",
+    consentVersion: CURRENT_CONSENT_VERSION,
+    tags: ["friendships"],
+    active: false,
+  });
+
   // --- Synthetic contributors + submissions run through the real (fake-provider) pipeline ---
   const storage = getStorageAdapter();
 

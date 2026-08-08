@@ -342,13 +342,23 @@ export function ContributorFlow({
       return;
     }
 
+    // IMPORTANT: track success locally rather than re-reading `recordings`
+    // state after these awaits — `recordings` here is a stale closure
+    // captured when beginUploads() started, and setRecordings() calls made
+    // inside uploadOneAnswer() during the loop do not update it. Reading
+    // state instead of these local results would make this function think
+    // every upload was still "idle" even after they'd all succeeded.
+    const results: boolean[] = [];
     for (const answer of answers) {
       const recording = recordings[answer.id];
-      if (!recording?.blob) continue;
-      await uploadOneAnswer(answer.id, recording.blob);
+      if (!recording?.blob) {
+        results.push(false);
+        continue;
+      }
+      results.push(await uploadOneAnswer(answer.id, recording.blob));
     }
 
-    const allDone = answers.every((a) => recordings[a.id]?.uploadState === "done");
+    const allDone = results.every(Boolean);
     if (!allDone) {
       // Individual failures are shown inline per-question; overall retry is available below.
       return;
@@ -364,7 +374,7 @@ export function ContributorFlow({
     setStep("complete");
   }
 
-  async function uploadOneAnswer(answerId: string, blob: Blob, attempt = 0): Promise<void> {
+  async function uploadOneAnswer(answerId: string, blob: Blob, attempt = 0): Promise<boolean> {
     setRecordings((prev) => ({
       ...prev,
       [answerId]: { ...prev[answerId], uploadState: "uploading", uploadProgress: 0, uploadError: null },
@@ -407,6 +417,7 @@ export function ContributorFlow({
         ...prev,
         [answerId]: { ...prev[answerId], uploadState: "done", uploadProgress: 1, storageKey: initData.storageKey },
       }));
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed.";
       if (attempt < MAX_RETRY_ATTEMPTS) {
@@ -417,18 +428,22 @@ export function ContributorFlow({
         ...prev,
         [answerId]: { ...prev[answerId], uploadState: "error", uploadError: message },
       }));
+      return false;
     }
   }
 
   async function retryFailedUploads() {
     setUploadOverallError(null);
+    const outcomes: boolean[] = [];
     for (const answer of answers) {
       const recording = recordings[answer.id];
       if (recording?.uploadState === "error" && recording.blob) {
-        await uploadOneAnswer(answer.id, recording.blob);
+        outcomes.push(await uploadOneAnswer(answer.id, recording.blob));
+      } else {
+        outcomes.push(recording?.uploadState === "done");
       }
     }
-    const allDone = answers.every((a) => recordings[a.id]?.uploadState === "done");
+    const allDone = outcomes.every(Boolean);
     if (allDone && submissionId) {
       setFinalizing(true);
       const finalize = await finalizeSubmissionAction(submissionId);
