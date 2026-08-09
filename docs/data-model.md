@@ -9,7 +9,7 @@ See also `docs/architecture.md` Section 5 for the one-paragraph summary and the 
 **Organization / brand / admin**
 
 - `organizations` — the tenant boundary. V1 ships with exactly one row (Camp Coleman) but every other table hangs off an `organization_id` so a second organization is a data-insert away, not a schema migration. See `docs/architecture.md` "Tenancy Strategy."
-- `organization_brands` — one-to-one with `organizations`. Visual tokens (colors, fonts, logo URL) are all nullable and default to placeholder-safe values, with an explicit `is_placeholder` boolean, because no confirmed Camp Coleman brand assets exist yet (see `docs/brand-audit.md`).
+- `organization_brands` — one-to-one with `organizations`. Visual tokens (colors, fonts, logo URL) are all nullable, with an explicit `is_placeholder` boolean so the app can render safely even before real values are set. As of DL-013, the row is populated with the real, owner-approved Camp Coleman tokens (`is_placeholder: false`) via `npm run brand:update` — see `docs/brand-audit.md` for the audit and provenance, and `src/scripts/update-brand.ts` for the idempotent script that applies them.
 - `admin_users` — staff accounts. `password_hash` is bcrypt (never plaintext, never reversible). `active` allows disabling an account without deleting its audit trail.
 
 **Campaigns / questions**

@@ -82,7 +82,7 @@ Delegated to the managed Postgres provider's automated backups — confirm they'
 
 ## 8. Production smoke test (run once, immediately after deploy, before announcing to anyone)
 
-1. Load the production home page over HTTPS; confirm the correct (non-placeholder, if brand assets have arrived by then) branding renders.
+1. Load the production home page over HTTPS; confirm the real Camp Coleman branding renders (navy/teal/blue palette, Montserrat/Open Sans, real logo — see DL-013) rather than the `globals.css` fallback defaults. If it doesn't, confirm `npm run brand:update` (Step 6b of `docs/phase-14-provisioning-runbook.md`) was actually run against the production database.
 2. Start a campaign submission as a real test — using a clearly-fake test identity, not a real alumnus's real story — through to completion, confirming a real recording uploads via the Supabase adapter and the submission reaches `SUBMITTED`.
 3. With `TRANSCRIPTION_PROVIDER=none`, confirm the submission transitions straight `PROCESSING → READY_FOR_REVIEW` with no processing job created (query `processing_jobs` for that submission and confirm it's empty) and no transcript/analysis fabricated.
 4. Log in as the real first-admin account (Josh Hirsch); confirm the test submission is visible, searchable by name, and its media plays back via a signed URL (confirm the raw storage URL is NOT directly accessible without a token).
