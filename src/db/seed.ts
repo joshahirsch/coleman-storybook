@@ -80,13 +80,21 @@ async function main() {
     .values({ name: "URJ Camp Coleman", slug: "camp-coleman", contactEmail: "info@campcoleman.org" })
     .returning();
 
+  // Values below are sourced from a live visual/computed-style audit of
+  // https://campcoleman.org/ (2026-08-08), approved by the owner (Josh
+  // Hirsch) the same day as Coleman Storybook's working brand tokens — see
+  // docs/brand-audit.md. Not an official Coleman brand guide (none has been
+  // supplied); supersede these if one is ever provided.
   await db.insert(organizationBrands).values({
     organizationId: org.id,
     productName: "Coleman Storybook",
-    isPlaceholder: true,
-    primaryColor: "#1E3E32",
-    secondaryColor: "#121E33",
-    accentColor: "#E06A3E",
+    isPlaceholder: false,
+    primaryColor: "#0C71C3",
+    secondaryColor: "#003F69",
+    accentColor: "#74CCD3",
+    fontHeading: "Montserrat",
+    fontBody: "Open Sans",
+    logoUrl: "/brand/coleman-logo.png",
   });
 
   const passwordHash = await hashPassword("ColemanStorybook!Dev1");

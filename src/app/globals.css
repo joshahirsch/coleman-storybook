@@ -1,22 +1,37 @@
 @import "tailwindcss";
 
 /*
- * Brand tokens. Defaults below are PLACEHOLDERS (see docs/brand-audit.md —
- * not confirmed Camp Coleman brand colors). Overridden at runtime per
- * organization via inline CSS variables set in the root layout from
- * OrganizationBrand — see src/app/layout.tsx.
+ * Brand tokens for Camp Coleman.
+ *
+ * Sourced from a live visual/computed-style audit of https://campcoleman.org/
+ * (navy/teal/blue, mountain-and-lake mark, Montserrat + Open Sans) on
+ * 2026-08-08 — NOT from an official Coleman brand guide, since none has been
+ * supplied yet. Owner (Josh Hirsch) reviewed and approved these as Coleman
+ * Storybook's working brand tokens on 2026-08-08. See docs/brand-audit.md
+ * for the full audit and provenance. If Camp Coleman later supplies an
+ * official brand guide, it should still supersede these observed values.
+ *
+ * Runtime override: the values actually applied on any given page come from
+ * the OrganizationBrand DB row (see src/lib/data/organization.ts,
+ * src/app/layout.tsx) — the values below are the fallback/defaults if that
+ * row or a field on it is ever missing. Apply the same values to the DB via
+ * `npm run brand:update` (src/scripts/update-brand.ts) — do NOT re-run
+ * `db:seed` against a database with real data, it TRUNCATEs everything.
  */
 :root {
   --background: #f4f5f3;
   --foreground: #1a1a1a;
-  --brand-primary: #1e3e32; /* placeholder "forest" */
-  --brand-secondary: #121e33; /* placeholder "navy" */
-  --brand-accent: #e06a3e; /* placeholder "coral" */
+  --brand-primary: #0c71c3; /* Coleman blue — buttons/CTAs */
+  --brand-secondary: #003f69; /* Coleman navy — headings, primary text */
+  --brand-accent: #74ccd3; /* Coleman teal — focus rings, highlights */
   --brand-surface: #ffffff;
   --brand-muted: #5b6570;
   --brand-hairline: #dde1de;
-  /* Placeholder system-font stack pending a real Camp Coleman brand font (docs/brand-audit.md). */
-  --font-app-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Self-hosted (next/font/local, src/app/fonts) — no runtime dependency on
+     Google's font CDN. Raw font variables are set on <body> in layout.tsx. */
+  --font-app-sans: var(--font-open-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-app-heading: var(--font-montserrat), var(--font-app-sans);
 }
 
 @theme inline {
@@ -29,6 +44,7 @@
   --color-brand-muted: var(--brand-muted);
   --color-brand-hairline: var(--brand-hairline);
   --font-sans: var(--font-app-sans);
+  --font-heading: var(--font-app-heading);
 }
 
 body {

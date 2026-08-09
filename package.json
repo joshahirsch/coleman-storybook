@@ -17,6 +17,7 @@
     "db:seed": "tsx --env-file=.env.local src/db/seed.ts",
     "admin:create": "tsx --env-file=.env.local src/scripts/create-admin.ts",
     "content:bootstrap": "tsx --env-file=.env.local src/scripts/bootstrap-content.ts",
+    "brand:update": "tsx --env-file=.env.local src/scripts/update-brand.ts",
     "jobs:process": "tsx --env-file=.env.local src/scripts/process-jobs.ts"
   },
   "dependencies": {

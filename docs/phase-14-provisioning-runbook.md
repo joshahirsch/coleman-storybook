@@ -73,6 +73,16 @@ DATABASE_URL="<production connection string>" npm run content:bootstrap
 
 Non-destructive, idempotent (safe to re-run — skips anything that already exists rather than duplicating). Creates the real "URJ Camp Coleman" organization and the three already-designed campaigns (Alumni Stories, Staff Stories, Parent Stories) with their real questions — not placeholder content, the same copy `src/db/seed.ts` has used since Phase 3, just extracted out from under the destructive `TRUNCATE`. Per DL-009's small-alumni-pilot scope, only the **alumni** campaign is activated by default; staff/parents are created but left inactive. If that scope has since changed, re-run with `ACTIVATE_ALL_CAMPAIGNS=true`, or activate individual campaigns directly (there's no admin UI for this yet — Phase 16, "Self-Service Campaign Management").
 
+## Step 6b — Apply the real brand tokens
+
+`content:bootstrap` creates the `organizations` row but not its `organization_brands` row, so the site would otherwise render with no brand tokens set (falling back to `globals.css`'s `:root` defaults, which happen to already match — but don't rely on that coincidence in production):
+
+```
+DATABASE_URL="<production connection string>" npm run brand:update
+```
+
+Non-destructive, idempotent (updates in place if a brand row already exists, per DL-013). Applies the owner-approved, observed-from-the-live-site navy/teal/blue palette and Montserrat/Open Sans typefaces, and points `logoUrl` at the real logo the owner supplied (`public/brand/coleman-logo.png`, deployed as a static asset — no extra step needed beyond the normal Vercel deploy in Step 3).
+
 ## Step 7 — Smoke-test the storage adapter
 
 This is `docs/production-launch-checklist.md` Section 2, item 1 — the one item that has always required a real bucket to exist. With the bucket from Step 1.3 live:

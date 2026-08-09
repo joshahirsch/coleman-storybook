@@ -70,3 +70,18 @@ Georgia mountain/outdoor setting, tree-line silhouettes, simple topographic or t
 - Confirm whether the "GET A HOLD" campaign's navy/forest/coral palette is desired as a starting point for Coleman Storybook, or whether Storybook should use a distinct placeholder palette so the two initiatives don't visually blur together.
 
 This document will be revised once real brand materials are supplied. Until then, all visual work in this repository uses clearly-labeled placeholder tokens (see `docs/architecture.md`, `OrganizationBrand`).
+
+## 7. Update — 2026-08-08: Live-site visual audit, owner-approved
+
+Josh flagged that the app "doesn't feel like Camp Coleman." Since the automated fetch in Section 1 couldn't extract computed CSS, a Claude Cowork session did a direct browser-based visual/computed-style audit of https://campcoleman.org/ (screenshot + `getComputedStyle` inspection of the live DOM, not a guess). Findings, now **OBSERVED** rather than inferred:
+
+- **Logo/mark:** navy mountain-and-lake emblem with "URJ · CAMP COLEMAN" wordmark (arched "COLEMAN" in black/teal outline, small Star of David accent between "URJ" and "CAMP"). Hosted at `campcoleman.org/wp-content/uploads/sites/11/2020/09/Camp_Coleman_logo-1.png`. Not yet rehosted in this repo — automated download of the raw file was blocked by the assistant's own tooling (by design, to prevent scraping); need Josh to supply the actual file (save-as from the live site or an official asset package) and drop it in `public/brand/` for it to be wired into `OrganizationBrand.logoUrl`.
+- **Colors:** navy `#003F69` (dominant — body text/links, 45 occurrences sampled), teal `#74CCD3` (top utility bar), blue `#0C71C3` (CTA buttons/links), plus a medium steel-blue band color on secondary CTAs. No green, no coral/orange anywhere on the real site — this is a **blue/teal palette**, not the forest/coral placeholder from Section 1/the GET A HOLD deck. Using the GET A HOLD palette here would have been visually wrong, not just unconfirmed.
+- **Typography:** Montserrat (bold, ~700 weight) for headings/nav, Open Sans for body — both real Google Fonts, confirmed via computed `font-family`.
+- **Overall feel:** clean/modern, mountain-and-lake outdoor motif, not rustic/vintage.
+
+**Decision (owner-approved 2026-08-08):** Adopt the observed navy/teal/blue palette and Montserrat/Open Sans as Coleman Storybook's working brand tokens — implemented via `OrganizationBrand` (unchanged architecture from Section 1's recommendation), applied via `npm run brand:update` (`src/scripts/update-brand.ts`, safe/non-destructive — do not use `db:seed` against a database with real data). Fonts self-hosted via `next/font/local` from `src/app/fonts/` (OFL-licensed, no Google CDN dependency at build or runtime). `isPlaceholder` flipped to `false` for these values since they're now owner-confirmed, not a guess — but this is still **not** a formal Camp Coleman brand guide, and should be superseded the moment Coleman supplies one.
+
+**Still open:** any official confirmation beyond this visual audit (e.g. a marketing contact confirming these are the intended standard, not just what happens to render on the current WordPress theme).
+
+**Update — same day:** Josh supplied the real logo file directly (saved from campcoleman.org himself), resolving the one item above the assistant's own tooling couldn't complete. It's committed at `public/brand/coleman-logo.png` (1535×732, transparent PNG) and wired into `OrganizationBrand.logoUrl` via `src/scripts/update-brand.ts` and `src/db/seed.ts`, rendered on the home page and campaign landing pages.

@@ -470,7 +470,7 @@ export function ContributorFlow({
 
       {step === "identity" && (
         <form onSubmit={handleIdentitySubmit} className="flex flex-col gap-4" noValidate>
-          <h1 className="text-2xl font-semibold text-brand-secondary">Tell us a bit about you</h1>
+          <h1 className="font-heading text-2xl font-bold text-brand-secondary">Tell us a bit about you</h1>
           <div className="flex gap-3">
             <label className="flex-1 text-sm font-medium text-brand-secondary">
               First name
@@ -555,7 +555,7 @@ export function ContributorFlow({
 
       {step === "consent" && (
         <div className="flex flex-col gap-4">
-          <h1 className="text-2xl font-semibold text-brand-secondary">Before you record</h1>
+          <h1 className="font-heading text-2xl font-bold text-brand-secondary">Before you record</h1>
           <div className="max-h-64 overflow-y-auto rounded-md border border-brand-hairline bg-brand-surface p-4 text-sm text-brand-muted whitespace-pre-wrap">
             {consentText}
           </div>
@@ -597,7 +597,7 @@ export function ContributorFlow({
 
       {step === "permissions" && (
         <div className="flex flex-col gap-4">
-          <h1 className="text-2xl font-semibold text-brand-secondary">Get ready to record</h1>
+          <h1 className="font-heading text-2xl font-bold text-brand-secondary">Get ready to record</h1>
           <ul className="list-disc pl-5 text-sm text-brand-muted">
             <li>Find a reasonably quiet place.</li>
             <li>Face a light source rather than having it behind you.</li>
@@ -644,7 +644,7 @@ export function ContributorFlow({
           <p className="text-sm text-brand-muted">
             Question {currentQuestionIndex + 1} of {answers.length}
           </p>
-          <h1 className="text-2xl font-semibold text-brand-secondary">{currentQuestion.prompt}</h1>
+          <h1 className="font-heading text-2xl font-bold text-brand-secondary">{currentQuestion.prompt}</h1>
           {currentQuestion.helpText && <p className="text-sm text-brand-muted">{currentQuestion.helpText}</p>}
 
           <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
@@ -702,7 +702,7 @@ export function ContributorFlow({
 
       {step === "uploading" && (
         <div className="flex flex-col gap-4">
-          <h1 className="text-2xl font-semibold text-brand-secondary">Uploading your story…</h1>
+          <h1 className="font-heading text-2xl font-bold text-brand-secondary">Uploading your story…</h1>
           <p className="text-sm text-brand-muted">
             Please stay on this page until this finishes. This can take a few minutes on slower connections.
           </p>
@@ -744,7 +744,7 @@ export function ContributorFlow({
 
       {step === "complete" && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <h1 className="text-2xl font-semibold text-brand-secondary">
+          <h1 className="font-heading text-2xl font-bold text-brand-secondary">
             {completionHeadline ?? "Your story is now part of the Coleman story."}
           </h1>
           <p className="text-brand-muted">{completionCopy ?? "Todah rabah — thank you for sharing your Coleman story."}</p>

@@ -32,7 +32,9 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
-## DL-003: Brand tokens treated as placeholder/configurable pending real Camp Coleman brand materials
+## DL-003: Brand tokens treated as placeholder/configurable pending real Camp Coleman brand materials — superseded by DL-013
+
+**Superseded 2026-08-08 — see DL-013.** This decision's own "Revisit When" condition (Coleman supplies a brand guide, logo, or explicit color confirmation) has been met; real, owner-approved brand tokens are now in use. Left below unedited as the historical record of why placeholders were the correct starting choice.
 
 **Decision:** No specific colors, fonts, or logo files are treated as "official Camp Coleman brand" until Coleman supplies them or a stakeholder explicitly confirms values sampled from the live site.
 
@@ -179,6 +181,24 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 **Tradeoffs:** None significant — this is a straightforward extraction of already-approved content into a safe, reusable form. The one real constraint: there's still no way to *edit* campaign copy after this script creates it, short of a direct database edit — that gap is Phase 16's job, not this script's.
 
 **Revisit When:** Phase 16 (Self-Service Campaign Management) ships an admin UI for campaign creation/editing — at that point this script becomes a convenience for initial setup rather than the only path to create a campaign, but doesn't need to be removed.
+
+---
+
+## DL-013: Adopt observed Camp Coleman brand tokens; supersedes DL-003's placeholder palette
+
+**Decision:** Coleman Storybook's working brand tokens are now the navy/teal/blue palette and Montserrat/Open Sans typefaces observed on the live campcoleman.org site (navy `#003F69`, teal `#74CCD3`, blue `#0C71C3`), plus the real Camp Coleman logo the owner supplied directly. `OrganizationBrand.isPlaceholder` is `false` for these values. This work was done in a separate, parallel Cowork session focused on branding/UX while this session worked backend/infra — both are now unified into this single workstream going forward, per the owner's instruction.
+
+**Why:** DL-003 deliberately left brand tokens as placeholder/configurable specifically until "Coleman supplies [a brand guide/logo/materials] or a stakeholder explicitly confirms values sampled from the live site" — that condition is now met: a direct browser-based visual/computed-style audit of the live site (screenshot + `getComputedStyle` inspection, not a guess) was owner-reviewed and approved the same day, and the owner separately supplied the actual logo file. See `docs/brand-audit.md` Section 7 for the full audit and provenance.
+
+**What changed, mechanically:** `src/app/globals.css`'s CSS custom properties, `src/app/layout.tsx` (self-hosted Montserrat/Open Sans via `next/font/local` from committed `.woff2` files — no Google Fonts CDN dependency at build or runtime), the home page and campaign landing pages (real logo via `next/image`, heading font applied), and `src/components/public/contributor-flow.tsx` (heading font on step titles). `src/db/seed.ts` seeds these as the dev database's brand row; the non-destructive, idempotent `src/scripts/update-brand.ts` (`npm run brand:update`) applies the same values to an existing (e.g. production) database without touching anything else — same pattern as `create-admin.ts` and `bootstrap-content.ts`.
+
+**Merge note:** while assimilating this into the unified workstream, one line in `src/db/seed.ts` (the synthetic consent records' `consentTextReference` value) had reverted to a stale value because the branding session's local copy of that file predated this session's DL-010 consent-text fix — a working-tree-only conflict from two sessions editing the same file, never a git history issue. Restored to the correct DL-010 value (`src/lib/consent.ts (buildConsentText) — see docs/decision-log.md DL-010`) as part of this merge; everything else in the branding session's work was taken as-is after review (typecheck, lint, unit tests, full E2E suite including the accessibility scan, and a production build all verified clean afterward).
+
+**Alternatives:** Keep waiting for an official Camp Coleman brand guide before adopting any real values (rejected — DL-003's own stated revisit condition, "explicit color confirmation," is satisfied, and waiting indefinitely for a document that may never arrive isn't better than owner-approved observed values that are clearly documented as such).
+
+**Tradeoffs:** Still not a formal Camp Coleman brand guide — if Coleman later supplies one and it differs from what's observed on the live site, these values should be superseded again, per `docs/brand-audit.md`'s own framing.
+
+**Revisit When:** Camp Coleman supplies an official brand guide that differs from the observed live-site values.
 
 ---
 
