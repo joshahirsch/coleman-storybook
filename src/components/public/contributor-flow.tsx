@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   beginUploadAction,
@@ -819,12 +818,24 @@ export function ContributorFlow({
             anywhere. You&apos;re all done here — feel free to close this page.
           </p>
 
-          <Link
+          {/*
+            Deliberately a plain <a>, not next/link's <Link>: this page IS
+            `/${campaignSlug}/share`, so a <Link> here navigates to the
+            current URL. Next's client-side router treats that as a no-op
+            (no page change, so no re-render) rather than remounting the
+            page -- which meant clicking it visibly did nothing, since
+            ContributorFlow's ~15 pieces of local state (step, submissionId,
+            recordings, the camera stream ref, etc.) never got reset. A real
+            navigation forces the browser to reload the page and mount a
+            fresh ContributorFlow from scratch, which is what "start another
+            story" actually needs here.
+          */}
+          <a
             href={`/${campaignSlug}/share`}
             className="mt-2 rounded-full border border-brand-hairline px-6 py-3 text-sm font-medium text-brand-secondary transition hover:bg-brand-surface"
           >
             Share another Coleman story
-          </Link>
+          </a>
         </div>
       )}
     </div>

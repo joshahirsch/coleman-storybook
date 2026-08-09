@@ -246,4 +246,18 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-017: "Share another Coleman story" link did nothing — same-URL `<Link>` navigation is a no-op
+
+**Decision:** Changed the completion screen's "Share another Coleman story" link (added in DL-016) from next/link's `<Link>` to a plain `<a>` tag.
+
+**Why:** Owner reported the button did nothing when clicked. Root cause: this link lives on `/${campaignSlug}/share`, and it points back to that exact same URL — a "start a fresh submission" action, not a real page-to-page navigation. Next.js's client-side router treats a `<Link>` click to the current URL as a no-navigation-needed no-op, so it never re-renders the page. `ContributorFlow` is a `"use client"` component holding roughly 15 pieces of local state (`step`, `submissionId`, `recordings`, the camera `MediaStream` ref, timers, blob URLs, etc.) entirely independent of the URL, so even if the router *had* done something, nothing would reset it. A plain `<a>` forces a genuine full-page navigation/reload, which is exactly what "start another story" needs: a completely fresh mount with all state back to its initial values.
+
+**What changed, mechanically:** `src/components/public/contributor-flow.tsx` — swapped `<Link href={...}>` for `<a href={...}>` and removed the now-unused `next/link` import. Verified with a throwaway Playwright script that drives a full submission to completion, clicks the link, and asserts the identity-step heading ("Tell us a bit about you") is visible again afterward at the same URL — this would have failed under the old `<Link>` (nothing observably changes). Full check suite (typecheck, lint, 34 unit tests, all 15 E2E specs, production build) clean afterward.
+
+**Alternatives:** Manually reset all ~15 pieces of `ContributorFlow` state via an `onClick` handler instead of forcing a reload (rejected — more code, more surface area to get wrong e.g. forgetting to revoke a blob URL or stop a media track, for a case where a full reload is genuinely fine UX-wise and also has the benefit of re-fetching the campaign's current questions/consent text from the server rather than reusing whatever was loaded at page-load time, which could be stale if the campaign changed in between).
+
+**Tradeoffs:** A full reload has a visible flash/loading moment a soft navigation wouldn't. Judged acceptable for a "record a whole separate story" action, which isn't a frequent rapid-fire interaction.
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*
