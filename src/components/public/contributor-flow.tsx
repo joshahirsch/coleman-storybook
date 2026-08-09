@@ -48,6 +48,26 @@ type Step =
 
 const MAX_RETRY_ATTEMPTS = 2;
 
+/**
+ * The identity and consent steps call Server Actions, which the browser
+ * invokes as a `fetch()` RPC under the hood. A genuine network failure
+ * (offline, DNS, connection refused, CORS) makes `fetch()` reject with a
+ * `TypeError` specifically; any *other* rejection means the server itself
+ * threw while handling the request (a bug, a misconfiguration — e.g. the
+ * incident on 2026-08-09 where a too-short SESSION_SECRET made the consent
+ * step fail this way). Those two cases used to be shown as the same
+ * "Network error — please check your connection" message, which was
+ * actively misleading for the second case and made it much harder to
+ * diagnose. This distinguishes them without exposing internal error
+ * details (stack traces, secrets) to contributors.
+ */
+function describeSubmitError(err: unknown): string {
+  if (err instanceof TypeError) {
+    return "Network error — please check your connection and try again.";
+  }
+  return "Something went wrong on our end. Please try again in a moment — if it keeps happening, let us know.";
+}
+
 export function ContributorFlow({
   campaignSlug,
   campaignTitle,
@@ -173,8 +193,8 @@ export function ContributorFlow({
       }
       setRecordings(initialRecordings);
       setStep("consent");
-    } catch {
-      setFormError("Network error — please check your connection and try again.");
+    } catch (err) {
+      setFormError(describeSubmitError(err));
     } finally {
       setSubmitting(false);
     }
@@ -199,8 +219,8 @@ export function ContributorFlow({
         return;
       }
       setStep("permissions");
-    } catch {
-      setFormError("Network error — please check your connection and try again.");
+    } catch (err) {
+      setFormError(describeSubmitError(err));
     } finally {
       setSubmitting(false);
     }

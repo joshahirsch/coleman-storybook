@@ -1,6 +1,7 @@
 import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { getRequiredSessionSecret } from "@/lib/env";
 
 /**
  * Admin session handling.
@@ -25,11 +26,10 @@ export interface AdminSessionPayload {
 }
 
 function getSecretKey(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret || secret.length < 16) {
-    throw new Error("SESSION_SECRET is not set (or too short) — see .env.example");
-  }
-  return new TextEncoder().encode(secret);
+  // src/instrumentation.ts validates this same requirement at server
+  // startup, so a misconfigured secret should already have failed loudly
+  // before any request reaches this code — see src/lib/env.ts.
+  return new TextEncoder().encode(getRequiredSessionSecret());
 }
 
 export async function createAdminSession(payload: AdminSessionPayload): Promise<void> {

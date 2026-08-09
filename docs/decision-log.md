@@ -202,4 +202,20 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-014: Fail fast on invalid environment config at server startup; stop mislabeling server errors as "Network error"
+
+**Decision:** Add `src/lib/env.ts` (`validateRequiredEnv()`) and `src/instrumentation.ts`, which calls it once via Next.js's `register()` hook when the server starts. A missing or too-short `SESSION_SECRET` (or missing `DATABASE_URL`) now stops the server immediately with a clear terminal message, instead of the app starting normally and only failing later, deep inside a request handler. Also fixed `src/components/public/contributor-flow.tsx`'s identity/consent submit handlers, which previously caught *any* error from a Server Action call and unconditionally showed "Network error — please check your connection and try again." — now `describeSubmitError()` only shows that message for an actual `TypeError` (what `fetch()` throws for genuine network failures); any other error shows an honest "something went wrong on our end" message instead.
+
+**Why:** Found via a real bug report — the owner hit "Network error" on the consent step (Step 2) while testing locally on 2026-08-09. Root cause: their local `.env.local` had `SESSION_SECRET="chalutzim"` (9 characters), below the 16-character minimum that `src/lib/hash.ts`'s `hashIp()` (called from `submitConsentAction`) and `src/lib/auth/session.ts`'s `getSecretKey()` (called from admin login) both already enforced — correctly, as fail-closed security checks (a short/guessable salt would make the IP hash reversible; see `docs/pre-production-review.md`). The bug wasn't the validation itself, which was working as designed — it was that (a) the check only ran the first time a request actually reached that code path, so the server appeared to start fine and only broke when a real contributor hit consent, and (b) the client-side catch-all discarded whatever the real thrown error was and always blamed "the network," actively misleading anyone trying to diagnose it (including this session, initially).
+
+**What changed, mechanically:** `getRequiredSessionSecret()` in the new `src/lib/env.ts` is now the single place the 16-character minimum is defined; `hash.ts` and `session.ts` both call it instead of duplicating the check inline. `src/instrumentation.ts`'s `register()` calls `validateRequiredEnv()` once at boot, gated to `NEXT_RUNTIME === "nodejs"` (not the Edge runtime `src/proxy.ts` runs under). Verified by deliberately setting a 9-character `SESSION_SECRET` locally: `npm run dev` now crashes immediately with `SESSION_SECRET is not set (or shorter than 16 characters) — see .env.example. Generate a real one with: openssl rand -base64 32`, rather than starting cleanly and failing later. With a valid secret restored, ran the full check suite (typecheck, lint, 34 unit tests, all 15 E2E specs including admin login and the full contributor happy path, and a production build) — all clean.
+
+**Alternatives:** Leave the check where it was (rejected — correct security behavior, wrong failure timing: a misconfigured secret should be a boot-time error, not something a contributor discovers for you in production). Make the client-side error message more detailed/technical (rejected for real contributors — showing internal error text to the public isn't appropriate; the fix is to stop being *wrong* about the cause, not to overshare).
+
+**Tradeoffs:** None significant. `validateRequiredEnv()` is deliberately conservative about what counts as "required" — only variables whose absence causes a hard failure somewhere (not every optional/defaulted variable) — so it won't nag about legitimately-unset optional config.
+
+**Revisit When:** Additional environment variables are added whose absence should also fail the server at boot rather than at first use — add them to `validateRequiredEnv()` following the same pattern.
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*

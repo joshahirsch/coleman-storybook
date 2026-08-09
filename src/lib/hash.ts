@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { getRequiredSessionSecret } from "@/lib/env";
 
 /**
  * We never store a contributor's raw IP address (see docs/security.md and
@@ -7,13 +8,13 @@ import { createHash } from "node:crypto";
  * times") without retaining directly identifying network data.
  */
 export function hashIp(ip: string): string {
-  const salt = process.env.SESSION_SECRET;
-  if (!salt || salt.length < 16) {
-    // Fail closed rather than silently hashing with a fixed, guessable
-    // salt — a predictable salt would make the "hash" reversible via a
-    // rainbow table over the IPv4/IPv6 address space, defeating the point.
-    // See docs/pre-production-review.md.
-    throw new Error("SESSION_SECRET is not set (or too short) — see .env.example");
-  }
+  // Fail closed rather than silently hashing with a fixed, guessable salt —
+  // a predictable salt would make the "hash" reversible via a rainbow
+  // table over the IPv4/IPv6 address space, defeating the point. See
+  // docs/pre-production-review.md. In normal operation this should never
+  // actually throw here — src/instrumentation.ts validates this same
+  // requirement at server startup, so a misconfigured secret fails loudly
+  // before any request reaches this code.
+  const salt = getRequiredSessionSecret();
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
