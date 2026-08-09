@@ -218,4 +218,32 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-015: Fix the recording-step camera preview showing a frozen/black frame instead of the live self-view
+
+**Decision:** Fixed `src/components/public/contributor-flow.tsx` so the live camera preview shown during recording is actually live, on every question, not just (sometimes) the first.
+
+**Why:** Owner-reported bug, with screenshots: while recording each answer, the preview showed either a solid black box (question 1) or a stuck, frozen photo (questions 2+) — the recording itself worked and was reviewable after stopping, but contributors couldn't see themselves while actually recording. Root cause: `videoPreviewRef` is shared by two *different* `<video>` DOM elements — one on the "permissions" step, a separate one on the "record" step — and `requestPermissions()` only ever assigned the live `MediaStream` to `.srcObject` once, on whichever element happened to be mounted at that exact moment. When the step changed to "record", a fresh `<video>` node mounted with no stream bound at all (black — question 1). Within the "record" step, the same DOM node then gets reused across a ternary between the live-preview view and the post-recording review view (`<video src={reviewUrl} controls>`); clearing the `src` attribute when returning to "idle" for the next question doesn't reset a previously-painted frame, so the last frame of the *previous* review clip stayed visually stuck on screen (the frozen photo on questions 2+) even though nothing was actually playing.
+
+**What changed, mechanically:** Added a `useEffect` keyed on `[step, permissionState, recordingState, currentQuestionIndex]` that re-binds `videoPreviewRef.current.srcObject = streamRef.current` and calls `.play()` every time the live-preview element should be showing — covering every step transition and every question, not just the first assignment. Also gave the live-preview and review-clip `<video>` elements distinct `key` props so React always mounts a genuinely fresh node for each, instead of mutating one shared node's attributes back and forth (removes any ambiguity about stale attributes/frames surviving a prop swap). Verified with a throwaway Playwright script driving 3 consecutive questions through Chromium's fake camera device, asserting `video.srcObject` is bound and `video.paused === false` during recording on every question (previously would have been `null`/frozen on questions 2+) and that `currentTime` advances monotonically across questions, confirming genuine live playback rather than a stuck frame. Full check suite (typecheck, lint, 34 unit tests, all 15 E2E specs, production build) clean afterward.
+
+**Alternatives:** Keep a single persistent `<video>` element for the whole "record" step and toggle its `src`/`srcObject` imperatively via refs without React re-rendering the element itself (viable, more code for the same outcome — the effect-plus-`key` approach is simpler and lets React's own lifecycle do the remounting).
+
+**Tradeoffs:** None significant.
+
+---
+
+## DL-016: Redesign the contributor completion screen
+
+**Decision:** The "Your story is now part of the Coleman story." completion screen now includes a success checkmark icon, an explicit note that the recording is saved and will be reviewed before use, a note that it's safe to close the page, and a "Share another Coleman story" link back to the campaign's `/share` entry point — instead of just a heading and one line of muted text over a large empty area.
+
+**Why:** Owner feedback alongside the camera-preview bug report: the closing screen "could be improved." The prior version left contributors with no confirmation of what happens next (is it reviewed? published immediately? do they need to do anything else?) and no path to record a second story for a different question set without navigating back manually.
+
+**What changed, mechanically:** `src/components/public/contributor-flow.tsx`'s `step === "complete"` block. The dynamic `completionHeadline`/`completionCopy` props (campaign-configurable, from `campaigns.completion_headline`/`completion_copy`) are unchanged and still take priority when set — this is additive framing around them, not a copy rewrite. Verified the existing E2E assertion (`getByRole("heading", { name: "Your story is now part of the Coleman story." })`) still passes since the heading text/role is untouched, plus the full E2E suite including the accessibility scan (which covers every page it was already scanning, this one included via the happy-path flow).
+
+**Alternatives:** None seriously considered — this was a straightforward polish pass, not a design decision with real tradeoffs.
+
+**Tradeoffs:** None significant.
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*

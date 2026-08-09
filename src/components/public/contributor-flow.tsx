@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   beginUploadAction,
@@ -146,6 +147,33 @@ export function ContributorFlow({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the live camera preview actually live.
+  //
+  // `videoPreviewRef` is shared by two DIFFERENT <video> elements: one on
+  // the "permissions" step, and a separate one on the "record" step (see
+  // the render below). `requestPermissions()` binds the MediaStream to
+  // whichever element happened to be mounted at that moment — but React
+  // mounts a brand-new <video> node when the step changes to "record" (and
+  // reuses/repurposes that same node for the post-recording review clip,
+  // whose `src` is a blob URL rather than a live stream). Nothing was ever
+  // re-binding `srcObject` after that first assignment, so contributors
+  // saw a black box while recording, then a stuck last frame from the
+  // review clip on every question after the first — never their actual
+  // live self-view. This effect re-binds the stream every time the
+  // live-preview element is (re)rendered, on every question and step
+  // transition, not just once.
+  useEffect(() => {
+    const showsLivePreview =
+      (step === "permissions" && permissionState === "granted") || (step === "record" && recordingState !== "recorded");
+    const el = videoPreviewRef.current;
+    if (showsLivePreview && el && streamRef.current) {
+      if (el.srcObject !== streamRef.current) {
+        el.srcObject = streamRef.current;
+      }
+      el.play().catch(() => {});
+    }
+  }, [step, permissionState, recordingState, currentQuestionIndex]);
 
   async function handleIdentitySubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -626,7 +654,7 @@ export function ContributorFlow({
           </ul>
 
           <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
-            <video ref={videoPreviewRef} className="h-full w-full object-cover" muted playsInline />
+            <video key="live-preview" ref={videoPreviewRef} className="h-full w-full object-cover" muted playsInline />
           </div>
 
           {permissionState !== "granted" && (
@@ -669,9 +697,9 @@ export function ContributorFlow({
 
           <div className="aspect-video w-full overflow-hidden rounded-md bg-black">
             {recordingState === "recorded" && reviewUrl ? (
-              <video src={reviewUrl} className="h-full w-full object-cover" controls playsInline />
+              <video key="review-clip" src={reviewUrl} className="h-full w-full object-cover" controls playsInline />
             ) : (
-              <video ref={videoPreviewRef} className="h-full w-full object-cover" muted playsInline />
+              <video key="live-preview" ref={videoPreviewRef} className="h-full w-full object-cover" muted playsInline />
             )}
           </div>
 
@@ -763,11 +791,40 @@ export function ContributorFlow({
       )}
 
       {step === "complete" && (
-        <div className="flex flex-col items-center gap-4 text-center">
-          <h1 className="font-heading text-2xl font-bold text-brand-secondary">
-            {completionHeadline ?? "Your story is now part of the Coleman story."}
-          </h1>
-          <p className="text-brand-muted">{completionCopy ?? "Todah rabah — thank you for sharing your Coleman story."}</p>
+        <div className="flex flex-col items-center gap-5 py-8 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-accent/20">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-8 w-8 text-brand-primary"
+              aria-hidden="true"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h1 className="font-heading text-2xl font-bold text-brand-secondary">
+              {completionHeadline ?? "Your story is now part of the Coleman story."}
+            </h1>
+            <p className="text-brand-muted">{completionCopy ?? "Todah rabah — thank you for sharing your Coleman story."}</p>
+          </div>
+
+          <p className="max-w-sm text-sm text-brand-muted">
+            Your recording has been saved and will be reviewed by the Coleman Storybook team before it&apos;s used
+            anywhere. You&apos;re all done here — feel free to close this page.
+          </p>
+
+          <Link
+            href={`/${campaignSlug}/share`}
+            className="mt-2 rounded-full border border-brand-hairline px-6 py-3 text-sm font-medium text-brand-secondary transition hover:bg-brand-surface"
+          >
+            Share another Coleman story
+          </Link>
         </div>
       )}
     </div>
