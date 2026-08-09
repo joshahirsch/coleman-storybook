@@ -16,6 +16,8 @@
 - CI (`.github/workflows/ci.yml`) running typecheck, lint, unit tests, `npm audit --audit-level=high`, and the full Playwright E2E suite against a real Postgres service container on every push/PR to `main`.
 - Versioned database migrations (`npm run db:generate` / `npm run db:migrate`), initial migration committed and verified, CI exercises it on every push — see Section 2, item 4.
 - A clean production build (`npm run build`) — verified locally, compiles and type-checks with no errors.
+- A non-destructive, idempotent script to create the real organization and campaigns (`npm run content:bootstrap`), verified end-to-end against a fresh migrated database — see Section 2, item 6.
+- A step-by-step provisioning walkthrough for the actual Phase 14 setup, `docs/phase-14-provisioning-runbook.md` — turns this checklist into an ordered set of actions.
 - Full documentation set: product vision, brand audit, architecture, data model, security, privacy/consent, decision log, testing, deployment, cost model, this checklist.
 
 ## 2. What is NOT ready — concrete engineering work required before Phase 14
@@ -31,6 +33,7 @@ These are not "nice to haves" — without them, "deploy to production" is not ac
    ADMIN_EMAIL="josh.hirsch@gmail.com" ADMIN_NAME="Josh Hirsch" npm run admin:create
    ```
    Copy the printed password immediately into a password manager — it is never stored in plaintext and is not shown again.
+6. ~~No production organization/campaign data would exist even after a fully-migrated database~~ — **done (DL-012).** Discovered while writing `docs/phase-14-provisioning-runbook.md`: `src/db/seed.ts` is the only code that ever created the `organizations`/`campaigns` rows, and it's dev-only and destructive. Without a fix, a fully-migrated, fully-admin-configured production database would still 404 on every campaign URL. Fixed with a third non-destructive, idempotent script — `src/scripts/bootstrap-content.ts` (`npm run content:bootstrap`) — that creates the real organization and the three already-designed campaigns (Alumni Stories, Staff Stories, Parent Stories, with their real questions — not placeholder content, extracted from `seed.ts`). Only the "alumni" campaign is activated by default, matching DL-009's small-alumni-pilot scope. Verified end-to-end against a fresh migrated database: creation, idempotent re-run (no duplicates), and confirmed the app's real data layer (`getActiveCampaignBySlug`, `getQuestionsForAudience`) correctly serves the result.
 
 ## 3. Environment variable inventory
 
@@ -58,6 +61,7 @@ See `.env.example` for the authoritative source. Every variable below needs a **
 - [ ] Domain/DNS: hosting platform's default subdomain (decided, DL-008) — no action needed beyond noting the resulting URL.
 - [ ] All environment variables from Section 3 set in the hosting platform's secret store (never committed to the repo) — note `TRANSCRIPTION_PROVIDER=none`, not `fake`.
 - [ ] `npm run db:migrate` run once against the real production database to create the schema (versioned migrations — see Section 2, item 4. Do not use `db:push` against production).
+- [ ] `npm run content:bootstrap` run once to create the real organization and campaigns — see Section 2, item 6. Without this, the site has no campaign to serve even though the schema exists.
 - [ ] Real first-admin account created for Josh Hirsch (josh.hirsch@gmail.com) — run `npm run admin:create` per Section 2, item 5.
 - [x] `npm audit --audit-level=high` now runs automatically on every push/PR to `main` via `.github/workflows/ci.yml` (see `docs/pre-production-review.md` P3-2 — fixed). No action needed here beyond keeping CI green; a new high/critical finding will fail the build.
 
@@ -98,15 +102,16 @@ Delegated to the managed Postgres provider's automated backups — confirm they'
 8. ~~**Pilot scope**~~ — small, alumni-only, "a handful of contributors" to prove the concept before expanding scope. No fixed timeline attached; expansion happens after POC validation, not on a calendar date. DL-009.
 9. ~~**Legal reviewer's sign-off & recording-consent jurisdiction check**~~ — owner explicitly decided to proceed with the MVP pilot without waiting for these ("pass on the legal review for now, this is just an MVP version"). The consent flow itself is fully built and unchanged; what's deferred is external counsel review of the specific draft language. Real, accepted risk — see DL-010 for exactly what this does and doesn't mean, and when to revisit it (before expanding past the initial small pilot). The packet (`docs/consent-legal-review-packet.md`) stays ready to send whenever the owner wants to circle back.
 10. ~~**Database migration workflow**~~ — switched from `db:push` to versioned migrations (`db:generate`/`db:migrate`), initial migration committed and verified, CI now exercises it. DL-011.
+11. ~~**Production organization/campaign bootstrap**~~ — a fully-migrated production database would have had no organization or campaign to serve; fixed with `npm run content:bootstrap`. DL-012.
 
 ### Still open
 
-11. **Supabase storage adapter smoke test** — genuinely can't be done without a real bucket; first thing to do once Supabase is provisioned (Section 2, item 1).
+12. **Supabase storage adapter smoke test** — genuinely can't be done without a real bucket; first thing to do once Supabase is provisioned (Section 2, item 1).
 
-Item 11 — the storage adapter smoke test — is now the only thing standing between here and Phase 14, and it requires a real Supabase bucket to exist first.
+Item 12 — the storage adapter smoke test — is now the only thing standing between here and Phase 14, and it requires a real Supabase bucket to exist first. `docs/phase-14-provisioning-runbook.md` has the full ordered walkthrough, including this step.
 
 ---
 
 ## Summary for the owner
 
-The application itself is built, tested, and reviewed — CI now runs the full check suite automatically on every push, database migrations are versioned and committed, and a production build compiles cleanly. With transcription/AI explicitly deferred, the infra stack decided (Vercel + Supabase, no dedicated domain yet), and legal review consciously deferred for the MVP pilot (DL-010), the remaining path to a real POC launch is now just: provision Vercel + Supabase, run `npm run db:migrate` against the real database, smoke-test the (already-written) storage adapter against the real bucket, and run `npm run admin:create` for Josh Hirsch's real account. No further product or process decisions are blocking — this is now purely execution, pending your go-ahead to actually provision production infrastructure (Phase 14).
+The application itself is built, tested, and reviewed — CI now runs the full check suite automatically on every push, database migrations are versioned and committed, and a production build compiles cleanly. With transcription/AI explicitly deferred, the infra stack decided (Vercel + Supabase, no dedicated domain yet), and legal review consciously deferred for the MVP pilot (DL-010), the remaining path to a real POC launch is now just: provision Vercel + Supabase, run `npm run db:migrate` and `npm run content:bootstrap` against the real database, smoke-test the (already-written) storage adapter against the real bucket, and run `npm run admin:create` for Josh Hirsch's real account. `docs/phase-14-provisioning-runbook.md` walks through all of this in order. No further product or process decisions are blocking — this is now purely execution, pending your go-ahead to actually provision production infrastructure (Phase 14).

@@ -166,4 +166,20 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-012: Add `bootstrap-content.ts` — production had no path to create the real organization/campaigns
+
+**Decision:** Added `src/scripts/bootstrap-content.ts` (`npm run content:bootstrap`), a third non-destructive, idempotent script alongside `create-admin.ts`. It creates the real "URJ Camp Coleman" organization and the three already-designed campaigns (Alumni Stories, Staff Stories, Parent Stories — with their real questions) if they don't already exist, matched by slug so it's safe to re-run. Only the "alumni" campaign is activated by default, matching DL-009's small-alumni-pilot scope; `ACTIVATE_ALL_CAMPAIGNS=true` overrides that.
+
+**Why:** Discovered while writing `docs/phase-14-provisioning-runbook.md` — walking through what Phase 14 would actually require step by step surfaced that `src/db/seed.ts` was the *only* code anywhere that ever inserted an `organizations` or `campaigns` row, and it's dev-only, destructive, and refuses to run in production (`assertNotProduction()`). Without this fix, someone following every other step correctly — provision infra, run `db:migrate`, run `admin:create` — would still reach a fully-configured production deployment that 404s on every campaign URL, because no organization or campaign exists to serve. This is exactly the kind of gap that's cheap to fix now and expensive to discover during an actual launch attempt.
+
+**What the campaign content is, and isn't:** the campaign titles, hero copy, and questions in this script are not new or invented content — they're the same real copy `src/db/seed.ts` has created since Phase 3 (real, usable questions like "What Coleman memory still makes you smile?", not synthetic-contributor-specific text), simply extracted out from under the destructive `TRUNCATE` so they can be created safely in production. The "friendships" campaign from `seed.ts` was deliberately left out — that one is a disabled-campaign test fixture for the Section 30 negative-path test, not real designed content.
+
+**Alternatives:** Have the owner create the organization/campaign rows via a manual `INSERT` (rejected — error-prone for something with an obvious, testable, idempotent script alternative, and the real content already exists in `seed.ts`, so hand-copying it risks transcription errors); build a full admin UI for campaign creation now (rejected — that's explicitly Phase 16, "Self-Service Campaign Management," out of scope for getting the MVP pilot launched); activate all three campaigns by default (rejected — DL-009 explicitly scoped the initial pilot to alumni only; defaulting to a narrower activation and providing an explicit override is safer than silently expanding scope).
+
+**Tradeoffs:** None significant — this is a straightforward extraction of already-approved content into a safe, reusable form. The one real constraint: there's still no way to *edit* campaign copy after this script creates it, short of a direct database edit — that gap is Phase 16's job, not this script's.
+
+**Revisit When:** Phase 16 (Self-Service Campaign Management) ships an admin UI for campaign creation/editing — at that point this script becomes a convenience for initial setup rather than the only path to create a campaign, but doesn't need to be removed.
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*
