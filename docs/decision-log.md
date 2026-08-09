@@ -260,4 +260,20 @@ Concise records of significant architectural/product choices. Each entry: Decisi
 
 ---
 
+## DL-018: Auto-process submissions in local dev instead of leaving them stuck in PROCESSING indefinitely
+
+**Decision:** Added `src/lib/dev-job-poller.ts`, started once from `src/instrumentation.ts`, which re-runs the same job-processing cycle every 4 seconds while `npm run dev` is running — but only when `NODE_ENV !== "production"` and `TRANSCRIPTION_PROVIDER !== "none"`.
+
+**Why:** Owner question, from real usage: two real recordings sat showing `PROCESSING` in the admin Story Library with no visible progress, prompting "how long does that take?" Answer: indefinitely, locally, by design as originally built — local dev deliberately uses `TRANSCRIPTION_PROVIDER="fake"` (unlike production's `"none"`) so the transcript/AI-analysis UI has something real to exercise, which means every submission *does* enqueue real `processing_jobs` rows. But nothing was ever configured to actually work that queue in local dev: production relies on an external scheduler (Vercel Cron) hitting `POST /api/jobs/process`, which is intentionally not wired up for this launch (`TRANSCRIPTION_PROVIDER=none` in production — see DL-009), and locally the only path was `npm run jobs:process` (already written, referenced only in the API route's own comment, undiscoverable unless you already knew to read that file). A real person testing the app locally has no reason to know that script exists, so from their perspective the queue would look permanently broken.
+
+**What changed, mechanically:** `dev-job-poller.ts` re-runs `runJobProcessingCycle()` (the exact function `npm run jobs:process` and the production API route both already call) on a `setInterval`, `.unref()`'d so it never keeps a process alive by itself. `instrumentation.ts`'s `register()` starts it once at server boot, alongside the existing env validation (DL-014) — same hook, same file, natural fit. Verified live: started the dev server, completed a real submission through the full contributor flow, and confirmed via direct SQL query that its state moved from `SUBMITTED` to `READY_FOR_REVIEW` on its own within the poll interval, with zero manual intervention. Full check suite (typecheck, lint, 34 unit tests, all 15 E2E specs, production build) clean afterward — the E2E suite already reseeds the database via Playwright's `globalSetup` before the server (and thus the poller) even starts, so there's no race with the poller mid-truncate.
+
+**Alternatives:** Just document `npm run jobs:process` more prominently (rejected — still requires a tester to remember to run it after every single submission, which is exactly the friction that produced this bug report; auto-processing removes the step entirely rather than making it easier to find). Auto-trigger processing synchronously from `finalizeSubmissionAction` itself (rejected — the architecture deliberately keeps processing decoupled from the contributor-facing finalize request, see `docs/architecture.md` Section 5's dual-state-machine rationale; blocking or racing that response on transcription work would be a real architectural regression for a dev-convenience fix).
+
+**Tradeoffs:** None for production (fully gated off by both `NODE_ENV` and the provider check — production keeps using the real external scheduler exactly as before). In local dev, this does mean the processing queue drains automatically rather than being a manually-controllable step — if a future test scenario specifically needs to inspect a submission mid-`PROCESSING` (queued-but-not-yet-run) state, that now requires stopping the dev server or briefly setting `TRANSCRIPTION_PROVIDER=none` rather than just waiting; no current test needs this.
+
+**Revisit When:** If local dev's fake providers ever gain artificial latency to more realistically simulate a real transcription vendor's turnaround time, this poller's 4-second interval may need to be reconsidered relative to that latency.
+
+---
+
 *(Further entries will be added as significant decisions arise in later phases.)*
