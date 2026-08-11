@@ -61,29 +61,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Configuration error." }, { status: 500 });
   }
 
-  const storage = getStorageAdapter();
-  const extension = EXTENSION_BY_MIME[parsed.data.mimeType] ?? "bin";
-  const key = storage.buildKey({
-    organizationSlug: org.slug,
-    submissionId: submission.id,
-    answerId: answer.id,
-    extension,
-  });
+  // Everything below can throw (bad/missing storage env vars, the storage
+  // provider's API rejecting the request, a DB write failing, etc.). An
+  // uncaught throw here means Next.js/Vercel returns a bare empty 500 with
+  // no JSON body — which is exactly what turned an actual (fixable)
+  // Supabase configuration problem into an opaque client-side
+  // "Unexpected end of JSON input" instead of a legible error. Always
+  // return structured JSON, even on failure, so the real cause is visible.
+  try {
+    const storage = getStorageAdapter();
+    const extension = EXTENSION_BY_MIME[parsed.data.mimeType] ?? "bin";
+    const key = storage.buildKey({
+      organizationSlug: org.slug,
+      submissionId: submission.id,
+      answerId: answer.id,
+      extension,
+    });
 
-  await createPendingMediaAsset({
-    submissionAnswerId: answer.id,
-    storageKey: key,
-    mimeType: parsed.data.mimeType,
-  });
+    await createPendingMediaAsset({
+      submissionAnswerId: answer.id,
+      storageKey: key,
+      mimeType: parsed.data.mimeType,
+    });
 
-  const target = await storage.createUploadTarget(key, parsed.data.mimeType);
+    const target = await storage.createUploadTarget(key, parsed.data.mimeType);
 
-  return NextResponse.json({
-    ok: true,
-    storageKey: key,
-    uploadUrl: target.url,
-    method: target.method,
-    headers: target.headers ?? {},
-    expiresInSeconds: target.expiresInSeconds,
-  });
+    return NextResponse.json({
+      ok: true,
+      storageKey: key,
+      uploadUrl: target.url,
+      method: target.method,
+      headers: target.headers ?? {},
+      bodyFormat: target.bodyFormat,
+      expiresInSeconds: target.expiresInSeconds,
+    });
+  } catch (err) {
+    console.error("[uploads/init] failed to prepare upload target:", err);
+    return NextResponse.json(
+      { ok: false, error: "Couldn't prepare the upload. Please try again in a moment." },
+      { status: 500 },
+    );
+  }
 }

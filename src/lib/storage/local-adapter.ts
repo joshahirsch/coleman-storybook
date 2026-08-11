@@ -59,6 +59,7 @@ export const localStorageAdapter: MediaStorageAdapter = {
       method: "PUT",
       url: `/api/uploads/put?key=${encodeURIComponent(key)}&token=${encodeURIComponent(token)}`,
       headers: { "Content-Type": contentType },
+      bodyFormat: "raw",
       expiresInSeconds,
     };
   },

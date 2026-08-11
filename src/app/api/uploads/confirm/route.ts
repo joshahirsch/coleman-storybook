@@ -29,22 +29,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, alreadyConfirmed: true });
   }
 
-  const storage = getStorageAdapter();
-  const confirmed = await storage.confirmUpload(parsed.data.storageKey);
-  if (!confirmed) {
+  // Same reasoning as /api/uploads/init: never let an uncaught throw here
+  // reach the client as a bare empty 500 (see that route for the full
+  // explanation of the bug this caused).
+  try {
+    const storage = getStorageAdapter();
+    const confirmed = await storage.confirmUpload(parsed.data.storageKey);
+    if (!confirmed) {
+      return NextResponse.json(
+        { ok: false, error: "Upload could not be verified on the server. Please retry the upload." },
+        { status: 409 },
+      );
+    }
+    if (confirmed.bytes > MEDIA_CONSTRAINTS.maxBytes) {
+      return NextResponse.json({ ok: false, error: "Uploaded file exceeds the maximum allowed size." }, { status: 413 });
+    }
+    if (!(MEDIA_CONSTRAINTS.allowedMimeTypes as readonly string[]).includes(confirmed.contentType)) {
+      return NextResponse.json({ ok: false, error: "Uploaded file has an unsupported type." }, { status: 415 });
+    }
+
+    await markMediaAssetConfirmed(asset.id, { bytes: confirmed.bytes, contentType: confirmed.contentType });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[uploads/confirm] failed to confirm upload:", err);
     return NextResponse.json(
-      { ok: false, error: "Upload could not be verified on the server. Please retry the upload." },
-      { status: 409 },
+      { ok: false, error: "Couldn't confirm the upload. Please try again in a moment." },
+      { status: 500 },
     );
   }
-  if (confirmed.bytes > MEDIA_CONSTRAINTS.maxBytes) {
-    return NextResponse.json({ ok: false, error: "Uploaded file exceeds the maximum allowed size." }, { status: 413 });
-  }
-  if (!(MEDIA_CONSTRAINTS.allowedMimeTypes as readonly string[]).includes(confirmed.contentType)) {
-    return NextResponse.json({ ok: false, error: "Uploaded file has an unsupported type." }, { status: 415 });
-  }
-
-  await markMediaAssetConfirmed(asset.id, { bytes: confirmed.bytes, contentType: confirmed.contentType });
-
-  return NextResponse.json({ ok: true });
 }

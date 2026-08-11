@@ -8,28 +8,30 @@ import type { ConfirmedUpload, MediaStorageAdapter, UploadTarget } from "./types
  * for both Postgres and Storage; see docs/decision-log.md DL-008 and
  * docs/deployment.md).
  *
- * IMPORTANT — VERIFICATION STATUS: this file has been written against
- * Supabase's documented JS SDK methods (`createSignedUploadUrl`,
- * `createSignedUrl`, `list`, `remove`) but has NOT been exercised against a
- * live Supabase project, because no real SUPABASE_URL /
- * SUPABASE_SERVICE_ROLE_KEY credentials exist in this development
- * environment. Do not treat this as tested/production-verified code — it
- * needs a real bucket and a real end-to-end upload/read/delete cycle run
- * against it before Phase 14 launch (see docs/production-launch-checklist.md).
+ * UPDATE 2026-08-11 — root-caused the first real live-bucket upload
+ * failure ("Unexpected end of JSON input" on the contributor-facing
+ * upload step). Two bugs, now fixed:
  *
- * A specific unresolved question this review surfaced (see the comment on
- * `createUploadTarget` below): Supabase's raw-HTTP contract for uploading to
- * a signed-upload-URL token is not fully documented publicly (confirmed by
- * checking Supabase's own docs and community discussion threads while
- * writing this file). The officially supported path is the JS SDK's
- * `uploadToSignedUrl(path, token, file)` method, not a generic PUT — so
- * the browser-side upload code (`src/lib/upload-client.ts`, currently a
- * generic XMLHttpRequest PUT built for the local dev adapter) will very
- * likely need a Supabase-specific branch that uses the Supabase JS SDK
- * client-side, rather than assuming the existing generic PUT works
- * unmodified against this adapter's returned UploadTarget. Flagging this
- * explicitly rather than guessing at an unverified raw-HTTP shape and
- * presenting it as done.
+ * 1. The previously-flagged open question about the raw-HTTP contract for
+ *    a signed-upload-URL token is now resolved by reading storage-js's own
+ *    source directly (`packages/StorageFileApi.ts`, `uploadToSignedUrl`),
+ *    not guessed at. Two things a bare PUT was missing: (a) the request
+ *    body must be `multipart/form-data` with a `cacheControl` field and
+ *    the file itself appended under an empty-string field name — a raw
+ *    bytes body is rejected; (b) Supabase's API gateway requires an
+ *    `apikey` header (or `apikey` query param) on every /storage/v1/*
+ *    request, including signed-upload-token consumption — without it the
+ *    gateway returns "No API key found in request" before the token is
+ *    even checked. `createUploadTarget` below now returns the exact
+ *    headers/body-format the client needs (see `bodyFormat` on
+ *    `UploadTarget` and `src/lib/upload-client.ts`) instead of assuming a
+ *    generic PUT works.
+ * 2. `src/app/api/uploads/init/route.ts` and `.../confirm/route.ts` did not
+ *    wrap adapter calls in try/catch, so any thrown error (e.g. the one
+ *    above) produced a bare empty 500 with no JSON body — which is what
+ *    actually surfaced client-side as "Unexpected end of JSON input"
+ *    rather than a legible error message. Both routes now return a
+ *    structured JSON error on failure.
  */
 
 let cachedClient: SupabaseClient | null = null;
@@ -58,6 +60,25 @@ function getBucket(): string {
   return bucket;
 }
 
+/**
+ * The browser-side upload PUT must carry this as an `apikey` header (see
+ * the file-level comment above) — Supabase's storage gateway rejects
+ * requests without one, even against a valid signed-upload token. The anon
+ * key is meant to be public/embeddable in client code; it grants no
+ * storage access on its own, the signed token does that.
+ */
+function getAnonKey(): string {
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (!anonKey) {
+    throw new Error(
+      "SUPABASE_ANON_KEY is not set — see .env.example. Required so the browser's " +
+        "upload PUT carries a valid apikey header; Supabase's gateway rejects " +
+        "storage requests without one even when a valid signed-upload token is present.",
+    );
+  }
+  return anonKey;
+}
+
 export const supabaseStorageAdapter: MediaStorageAdapter = {
   buildKey({ organizationSlug, submissionId, answerId, extension }) {
     const safeExt = extension.replace(/[^a-z0-9]/gi, "").slice(0, 10) || "bin";
@@ -66,19 +87,24 @@ export const supabaseStorageAdapter: MediaStorageAdapter = {
 
   async createUploadTarget(key): Promise<UploadTarget> {
     const client = getClient();
+    const anonKey = getAnonKey();
     const { data, error } = await client.storage.from(getBucket()).createSignedUploadUrl(key);
     if (error || !data) {
       throw new Error(`Failed to create Supabase signed upload URL for "${key}": ${error?.message ?? "unknown error"}`);
     }
     // Supabase's signed-upload token is valid for 2 hours per their docs.
-    // See the file-level comment above re: the unverified raw-HTTP upload
-    // contract — `url` here is Supabase's `signedUrl`, and `headers`
-    // carries the token in case the eventual client-side implementation
-    // needs it as a header rather than embedded in the URL/SDK call.
+    // `url` is Supabase's `signedUrl` (already includes the token as a
+    // query param). `headers` carries what a raw client-side PUT actually
+    // needs against this endpoint, verified against storage-js's own
+    // `uploadToSignedUrl` source rather than assumed — see the file-level
+    // comment above. `bodyFormat: "supabase-formdata"` tells the client
+    // (src/lib/upload-client.ts) to wrap the file in multipart/form-data
+    // instead of sending raw bytes, which this endpoint requires.
     return {
       method: "PUT",
       url: data.signedUrl,
-      headers: { "x-upsert": "false" },
+      headers: { "x-upsert": "false", apikey: anonKey },
+      bodyFormat: "supabase-formdata",
       expiresInSeconds: 2 * 60 * 60,
     };
   },

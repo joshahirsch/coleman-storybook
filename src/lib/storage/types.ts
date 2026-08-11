@@ -11,6 +11,23 @@ export interface UploadTarget {
   headers?: Record<string, string>;
   /** Seconds until this upload target itself expires (separate from read-URL expiry). */
   expiresInSeconds: number;
+  /**
+   * How the client must construct the PUT body.
+   *
+   * "raw" — send the file's bytes directly as the request body. This is
+   * what the local/dev adapter (and any future raw-object-storage adapter
+   * like S3/R2) expects.
+   *
+   * "supabase-formdata" — Supabase's signed-upload-URL endpoint does NOT
+   * accept a raw-bytes body, even though it takes a PUT. Its own SDK
+   * (`uploadToSignedUrl`) always wraps the file in a `multipart/form-data`
+   * body with a `cacheControl` field and the file itself under an
+   * empty-string field name — confirmed directly against storage-js's
+   * source (`packages/StorageFileApi.ts`), not assumed. See
+   * `supabase-adapter.ts` and `upload-client.ts` for the full explanation.
+   * A raw-bytes PUT against this URL fails.
+   */
+  bodyFormat: "raw" | "supabase-formdata";
 }
 
 export interface ConfirmedUpload {

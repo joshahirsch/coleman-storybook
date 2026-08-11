@@ -442,9 +442,16 @@ export function ContributorFlow({
         throw new Error(initData.error ?? "Couldn't prepare upload.");
       }
 
-      const putResult = await uploadWithProgress(initData.uploadUrl, initData.method, initData.headers, blob, (frac) => {
-        setRecordings((prev) => ({ ...prev, [answerId]: { ...prev[answerId], uploadProgress: frac } }));
-      });
+      const putResult = await uploadWithProgress(
+        initData.uploadUrl,
+        initData.method,
+        initData.headers,
+        blob,
+        initData.bodyFormat,
+        (frac) => {
+          setRecordings((prev) => ({ ...prev, [answerId]: { ...prev[answerId], uploadProgress: frac } }));
+        },
+      );
       if (!putResult.ok) {
         throw new Error("Upload failed. Please check your connection.");
       }

@@ -16,6 +16,7 @@ describe("supabaseStorageAdapter", () => {
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     delete process.env.SUPABASE_STORAGE_BUCKET;
+    delete process.env.SUPABASE_ANON_KEY;
   });
 
   afterEach(() => {
@@ -48,5 +49,18 @@ describe("supabaseStorageAdapter", () => {
       /SUPABASE_URL/,
     );
     await expect(supabaseStorageAdapter.getSignedReadUrl("some/key", 600)).rejects.toThrow(/SUPABASE_URL/);
+  });
+
+  it("fails closed (throws) when SUPABASE_ANON_KEY is missing, even if URL/service-role key are set", async () => {
+    // The anon key is required so the browser's upload PUT can carry a
+    // valid `apikey` header — Supabase's storage gateway rejects requests
+    // without one, even against a valid signed-upload token (see
+    // supabase-adapter.ts's file-level comment, added 2026-08-11 after
+    // this exact gap caused the first live-bucket upload to fail).
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test-key";
+    await expect(supabaseStorageAdapter.createUploadTarget("some/key", "video/webm")).rejects.toThrow(
+      /SUPABASE_ANON_KEY/,
+    );
   });
 });
