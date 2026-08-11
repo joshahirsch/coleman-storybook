@@ -4,13 +4,21 @@ import { stat, readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { verifyToken } from "@/lib/storage/signing";
 import { localObjectPath } from "@/lib/storage/local-adapter";
+import { fetchDriveMediaByKey } from "@/lib/storage/google-drive-adapter";
 
 /**
  * Serves a media object only to holders of a valid, unexpired signed token
  * (see src/lib/storage/signing.ts). Never lists or serves objects without
- * one — this is the local-dev stand-in for a cloud provider's signed URL,
- * and is the ONLY path through which recorded media is ever readable
+ * one — this is the ONLY path through which recorded media is ever readable
+ * for adapters that don't have their own native signed-URL primitive
  * (docs/architecture.md Section 8, docs/security.md).
+ *
+ * Dispatches on `STORAGE_DRIVER` because the underlying fetch mechanics
+ * differ per adapter (local disk read vs. proxied Drive API call) even
+ * though the token verification and response shape are identical. The
+ * Supabase adapter does NOT route through here — its `getSignedReadUrl`
+ * returns Supabase Storage's own native signed URL directly, since Supabase
+ * (unlike Drive) has a first-class time-limited signed-URL primitive.
  */
 export async function GET(request: NextRequest) {
   const key = request.nextUrl.searchParams.get("key");
@@ -22,6 +30,22 @@ export async function GET(request: NextRequest) {
   const verification = verifyToken(token, { key, purpose: "read" });
   if (!verification.valid) {
     return NextResponse.json({ error: `Link invalid or expired (${verification.reason}).` }, { status: 403 });
+  }
+
+  if (process.env.STORAGE_DRIVER === "drive") {
+    const media = await fetchDriveMediaByKey(key);
+    if (!media) {
+      return NextResponse.json({ error: "Object not found." }, { status: 404 });
+    }
+    return new Response(media.body, {
+      status: 200,
+      headers: {
+        "Content-Type": media.contentType,
+        ...(media.byteSize > 0 ? { "Content-Length": String(media.byteSize) } : {}),
+        "Cache-Control": "private, max-age=0, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }
 
   const filePath = localObjectPath(key);
