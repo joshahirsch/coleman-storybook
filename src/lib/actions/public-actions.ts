@@ -23,6 +23,7 @@ import { CURRENT_CONSENT_VERSION, buildConsentText } from "@/lib/consent";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate-limit";
 import { hashIp } from "@/lib/hash";
 import { logAuditEvent, trackAnalyticsEvent } from "@/lib/audit";
+import { exportContactCardsForSubmission } from "@/lib/contact-card-export";
 
 export interface StartSubmissionResult {
   ok: boolean;
@@ -203,6 +204,28 @@ export async function finalizeSubmissionAction(submissionId: string): Promise<Fi
     subjectType: "submission",
     subjectId: submissionId,
   });
+
+  // Best-effort: attach a contact-card companion file (contributor name,
+  // email, relationship, years/role — all already collected above) next to
+  // each video in Drive, per the adopted naming-convention + contact-card
+  // project docs. Drive-only (see that doc's "going forward only" scope);
+  // never blocks/fails the submission itself — a contributor's finalize
+  // must succeed even if this enrichment step has trouble (e.g. a Drive API
+  // hiccup), since the actual video uploads are already confirmed durable
+  // at this point.
+  if (process.env.STORAGE_DRIVER === "drive") {
+    try {
+      const result = await exportContactCardsForSubmission(submissionId);
+      if (result.failures.length > 0) {
+        console.error(
+          `[finalizeSubmissionAction] contact-card export: ${result.succeeded}/${result.attempted} succeeded for submission ${submissionId}; failures:`,
+          result.failures,
+        );
+      }
+    } catch (err) {
+      console.error(`[finalizeSubmissionAction] contact-card export threw for submission ${submissionId}:`, err);
+    }
+  }
 
   return { ok: true };
 }

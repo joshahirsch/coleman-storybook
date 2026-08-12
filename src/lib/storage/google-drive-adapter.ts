@@ -165,22 +165,50 @@ export async function fetchDriveMediaByKey(
   };
 }
 
+/** Fetches a Drive file's raw content as text by its file ID (not `key` — caller must already have looked it up via `findFileByKey`). Internal — used only by `appendRowToDriveCsvLog` below. */
+async function fetchFileTextById(fileId: string): Promise<string> {
+  const accessToken = await getAccessToken();
+  const res = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Google Drive file content fetch failed (${res.status}) for file id "${fileId}": ${body}`);
+  }
+  return res.text();
+}
+
+/** Overwrites an existing Drive file's content in place by its file ID, via Drive's simple `uploadType=media` update (metadata/name untouched). Internal — used only by `appendRowToDriveCsvLog` below. */
+async function updateFileMedia(fileId: string, contentType: string, data: Buffer): Promise<{ id: string; bytes: number }> {
+  const accessToken = await getAccessToken();
+  const res = await fetch(`${DRIVE_UPLOAD_API}/files/${fileId}?uploadType=media&fields=id,size`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": contentType,
+    },
+    body: new Uint8Array(data),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Google Drive media update failed for file id "${fileId}" (${res.status}): ${body}`);
+  }
+  const result = (await res.json()) as { id: string; size?: string };
+  return { id: result.id, bytes: result.size ? Number(result.size) : data.byteLength };
+}
+
 /**
- * Uploads a buffer we already hold server-side, in one request, under the
- * given key. Used ONLY by the one-time Supabase→Drive migration route
- * (`/api/admin/migrate-media-to-drive`) — everyday contributor uploads go
- * through `createUploadTarget`'s resumable-session/direct-PUT-from-browser
- * path instead, specifically so large recordings never pass through our
- * own server (see the file-level comment). A one-time admin-triggered
- * migration of a handful of already-uploaded files is exactly the case
- * where routing bytes through our server is fine — there's no other way to
- * move bytes that already live in a different provider's bucket.
- *
- * Uses Drive's single-request `multipart` upload (metadata + data in one
- * POST), not the resumable protocol — simpler when the whole buffer is
- * already in memory and doesn't need to be handed to an untrusted client.
+ * Shared single-request Drive `multipart` upload (metadata + data in one
+ * POST) — used for anything we already hold as an in-memory buffer
+ * server-side, as opposed to `createUploadTarget`'s resumable-session/
+ * direct-PUT-from-browser path (see the file-level comment) that everyday
+ * contributor recordings use so large files never pass through our own
+ * server. One caller today: the one-time Supabase→Drive migration route
+ * below (the contact-log CSV append has its own find-or-create path, see
+ * `appendRowToDriveCsvLog`, since an existing log file needs an in-place
+ * update rather than a fresh upload).
  */
-export async function uploadBufferToDriveForMigration(
+async function uploadMultipartToDrive(
   key: string,
   contentType: string,
   data: Buffer,
@@ -188,7 +216,7 @@ export async function uploadBufferToDriveForMigration(
   const rootFolderId = getRootFolderId();
   const accessToken = await getAccessToken();
 
-  const boundary = `coleman-storybook-migration-${randomUUID()}`;
+  const boundary = `coleman-storybook-upload-${randomUUID()}`;
   const metadata = JSON.stringify({ name: key, parents: [rootFolderId] });
   const preamble = Buffer.from(
     `--${boundary}\r\n` +
@@ -217,6 +245,69 @@ export async function uploadBufferToDriveForMigration(
 
   const result = (await res.json()) as { id: string; size?: string };
   return { id: result.id, bytes: result.size ? Number(result.size) : data.byteLength };
+}
+
+/**
+ * Uploads a buffer we already hold server-side under the given key. Used
+ * ONLY by the one-time Supabase→Drive migration route
+ * (`/api/admin/migrate-media-to-drive`) — a one-time admin-triggered
+ * migration of a handful of already-uploaded files is exactly the case
+ * where routing bytes through our server is fine, since there's no other
+ * way to move bytes that already live in a different provider's bucket.
+ */
+export async function uploadBufferToDriveForMigration(
+  key: string,
+  contentType: string,
+  data: Buffer,
+): Promise<{ id: string; bytes: number }> {
+  return uploadMultipartToDrive(key, contentType, data);
+}
+
+/**
+ * Appends one row to a single running CSV log file in the Drive root
+ * folder — the contributor-info companion to every confirmed video (see
+ * `src/lib/csv.ts` for row/header building and the contact-card-export
+ * project doc for why this is one growing spreadsheet rather than a
+ * per-video companion file: the data is consumed in a spreadsheet, not
+ * imported into a Contacts app). Creates the file (with `headerLine` as
+ * its first row) on first use; every call after that is a
+ * read-current-content → append → overwrite-in-place cycle via
+ * `fetchFileTextById` + `updateFileMedia`.
+ *
+ * Called from `finalizeSubmissionAction` (`src/lib/actions/public-actions.ts`)
+ * once per confirmed video; failures are caught and logged there rather
+ * than blocking the submission, since this is a data-enrichment step, not
+ * part of the core upload-confirmation contract.
+ *
+ * Known, accepted limitation: this is a plain read-modify-write, not an
+ * atomic append — if two calls race at the exact same moment (two
+ * different submissions finalizing simultaneously), the second write can
+ * silently overwrite the first's row rather than both landing (a lost
+ * update, never garbled/corrupted data). Accepted as a low-probability
+ * risk at this app's actual submission volume rather than building real
+ * locking — see the project doc for the tradeoff discussion. Multiple
+ * videos within the *same* submission are safe (this function is always
+ * called sequentially, one video at a time, from a single for-loop in
+ * `exportContactCardsForSubmission`).
+ */
+export async function appendRowToDriveCsvLog(
+  key: string,
+  headerLine: string,
+  rowLine: string,
+): Promise<{ id: string; bytes: number; created: boolean }> {
+  const existing = await findFileByKey(key);
+
+  if (!existing) {
+    const content = `${headerLine}\r\n${rowLine}\r\n`;
+    const result = await uploadMultipartToDrive(key, "text/csv", Buffer.from(content, "utf8"));
+    return { ...result, created: true };
+  }
+
+  const currentText = await fetchFileTextById(existing.id);
+  const trimmed = currentText.replace(/\r?\n$/, "");
+  const newContent = trimmed.length > 0 ? `${trimmed}\r\n${rowLine}\r\n` : `${headerLine}\r\n${rowLine}\r\n`;
+  const result = await updateFileMedia(existing.id, "text/csv", Buffer.from(newContent, "utf8"));
+  return { ...result, created: false };
 }
 
 export const googleDriveStorageAdapter: MediaStorageAdapter = {

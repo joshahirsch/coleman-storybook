@@ -1,5 +1,6 @@
 import { db } from "@/db/client";
 import {
+  campaignQuestions,
   consentRecords,
   contributors,
   mediaAssets,
@@ -119,4 +120,93 @@ export async function allAnswersHaveConfirmedMedia(submissionId: string): Promis
   const answers = await getSubmissionAnswersWithMedia(submissionId);
   if (answers.length === 0) return false;
   return answers.every((a) => a.mediaAssets.some((m) => m.status === "confirmed"));
+}
+
+export interface SubmissionExportVideo {
+  /** The confirmed media asset's Drive/storage key — what the contact-card companion file sits next to. */
+  storageKey: string;
+  /** 1-indexed question number within the campaign (answer.order + 1 as a fallback for guided-story mode, which has no per-question campaignQuestionId). */
+  questionNumber: number;
+}
+
+export interface SubmissionExportInfo {
+  submissionId: string;
+  /** Recorded/submitted date — submittedAt once set, falling back to createdAt for the (should-be-unreachable-by-finalize-time) case it's still null. */
+  submissionDate: Date;
+  contributor: {
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    relationship: string;
+    yearsAssociated: string | null;
+    roleInfo: string | null;
+  };
+  videos: SubmissionExportVideo[];
+}
+
+/**
+ * Gathers everything the contact-card export (`finalizeSubmissionAction` ->
+ * `exportContactCardsForSubmission`, see `src/lib/contact-card-export.ts`)
+ * needs for a submission: the contributor's identity fields exactly as
+ * they entered them at recording time, the submission date, and each
+ * confirmed video's storage key + 1-indexed question number. Only confirmed
+ * media assets are included — an in-progress or failed upload has nothing
+ * to log a row for yet.
+ */
+export async function getSubmissionExportInfo(submissionId: string): Promise<SubmissionExportInfo | null> {
+  const [row] = await db
+    .select({
+      submissionId: submissions.id,
+      submittedAt: submissions.submittedAt,
+      createdAt: submissions.createdAt,
+      firstName: contributors.firstName,
+      lastName: contributors.lastName,
+      email: contributors.email,
+      relationship: contributors.relationship,
+      yearsAssociated: contributors.yearsAssociated,
+      roleInfo: contributors.roleInfo,
+    })
+    .from(submissions)
+    .innerJoin(contributors, eq(submissions.contributorId, contributors.id))
+    .where(eq(submissions.id, submissionId))
+    .limit(1);
+
+  if (!row) return null;
+
+  const answers = await db
+    .select({
+      answerOrder: submissionAnswers.order,
+      questionOrder: campaignQuestions.order,
+      storageKey: mediaAssets.storageKey,
+      status: mediaAssets.status,
+    })
+    .from(submissionAnswers)
+    .innerJoin(mediaAssets, eq(mediaAssets.submissionAnswerId, submissionAnswers.id))
+    .leftJoin(campaignQuestions, eq(submissionAnswers.campaignQuestionId, campaignQuestions.id))
+    .where(eq(submissionAnswers.submissionId, submissionId));
+
+  const videos: SubmissionExportVideo[] = answers
+    .filter((a) => a.status === "confirmed")
+    .map((a) => ({
+      storageKey: a.storageKey,
+      // campaignQuestions.order is 0-indexed (see src/scripts/bootstrap-content.ts);
+      // guided-story answers have no campaignQuestionId at all, so fall back to
+      // the answer's own 0-indexed order instead. Either way, +1 for the
+      // 1-indexed q# the naming convention uses.
+      questionNumber: (a.questionOrder ?? a.answerOrder) + 1,
+    }));
+
+  return {
+    submissionId: row.submissionId,
+    submissionDate: row.submittedAt ?? row.createdAt,
+    contributor: {
+      firstName: row.firstName,
+      lastName: row.lastName,
+      email: row.email,
+      relationship: row.relationship,
+      yearsAssociated: row.yearsAssociated,
+      roleInfo: row.roleInfo,
+    },
+    videos,
+  };
 }
