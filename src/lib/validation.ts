@@ -13,13 +13,29 @@ export const relationshipValues = [
 export const contributorIdentitySchema = z.object({
   firstName: z.string().trim().min(1, "First name is required").max(100),
   lastName: z.string().trim().min(1, "Last name is required").max(100),
-  email: z.string().trim().email("Enter a valid email").max(255).optional().or(z.literal("")),
+  // Required as of the email-OTP-verification feature (2026-08-12) — was
+  // previously optional, but there's nothing to send a code to (and
+  // nothing trustworthy to log in the contact export CSV) without a real
+  // email. See docs/security.md.
+  email: z.string().trim().email("Enter a valid email").max(255),
   relationship: z.enum(relationshipValues),
   yearsAssociated: z.string().trim().max(100).optional().or(z.literal("")),
   roleInfo: z.string().trim().max(500).optional().or(z.literal("")),
   isAdult: z.literal(true, "Coleman Storybook is currently open to adult contributors only."),
 });
 export type ContributorIdentityInput = z.infer<typeof contributorIdentitySchema>;
+
+export const sendVerificationCodeSchema = z.object({
+  email: z.string().trim().email("Enter a valid email").max(255),
+});
+export type SendVerificationCodeInput = z.infer<typeof sendVerificationCodeSchema>;
+
+export const verifyEmailCodeSchema = z.object({
+  email: z.string().trim().email("Enter a valid email").max(255),
+  // Exactly 6 digits — see src/lib/auth/otp.ts's generateOtpCode().
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+export type VerifyEmailCodeInput = z.infer<typeof verifyEmailCodeSchema>;
 
 export const consentAcceptanceSchema = z.object({
   submissionId: z.string().uuid(),

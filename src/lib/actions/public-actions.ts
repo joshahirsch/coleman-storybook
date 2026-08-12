@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import {
   contributorIdentitySchema,
   consentAcceptanceSchema,
+  sendVerificationCodeSchema,
+  verifyEmailCodeSchema,
   type ContributorIdentityInput,
 } from "@/lib/validation";
 import { getActiveCampaignBySlug, getQuestionsForAudience } from "@/lib/data/campaigns";
@@ -17,6 +19,13 @@ import {
   recordConsent,
   transitionSubmission,
 } from "@/lib/data/submissions";
+import {
+  MAX_VERIFY_ATTEMPTS,
+  createEmailVerification,
+  getLatestEmailVerification,
+  incrementVerificationAttempts,
+  markEmailVerified,
+} from "@/lib/data/email-verification";
 import { enqueueTranscriptionJobs } from "@/lib/data/processing";
 import { isProcessingPipelineEnabled } from "@/lib/providers/transcription";
 import { CURRENT_CONSENT_VERSION, buildConsentText } from "@/lib/consent";
@@ -24,6 +33,116 @@ import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate-limit";
 import { hashIp } from "@/lib/hash";
 import { logAuditEvent, trackAnalyticsEvent } from "@/lib/audit";
 import { exportContactCardsForSubmission } from "@/lib/contact-card-export";
+import { generateOtpCode, hashOtpCode, verifyOtpCode } from "@/lib/auth/otp";
+import { issueVerificationToken, verifyVerificationToken } from "@/lib/auth/verification-token";
+import { getEmailProvider } from "@/lib/email";
+
+export interface SendVerificationCodeResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Sends a 6-digit one-time code to `email` (see docs/security.md's email
+ * OTP section and src/lib/auth/otp.ts). Called when a contributor submits
+ * the identity form, before any contributor/submission row exists —
+ * verifying the email is real happens BEFORE we act on it, not after.
+ *
+ * Rate-limited two ways: per-IP (a browser hammering "resend" repeatedly)
+ * and per-email (someone using this as a spam relay against a third
+ * party's inbox by entering an email they don't own) — same
+ * `checkRateLimit` helper other public endpoints use, same documented V1
+ * limitation (in-memory, single-process, see src/lib/rate-limit.ts).
+ */
+export async function sendVerificationCodeAction(email: string): Promise<SendVerificationCodeResult> {
+  const parsed = sendVerificationCodeSchema.safeParse({ email });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Enter a valid email address." };
+  }
+  const normalizedEmail = parsed.data.email.toLowerCase();
+
+  const hdrs = await headers();
+  const ip = clientIpFromHeaders(hdrs);
+
+  const ipLimit = checkRateLimit(`send-otp-ip:${ip}`, { maxRequests: 8, windowSeconds: 3600 });
+  if (!ipLimit.allowed) {
+    return { ok: false, error: "Too many code requests from this network recently. Please try again later." };
+  }
+  const emailLimit = checkRateLimit(`send-otp-email:${normalizedEmail}`, { maxRequests: 3, windowSeconds: 600 });
+  if (!emailLimit.allowed) {
+    return { ok: false, error: "Too many codes requested for this email recently. Please wait a few minutes and try again." };
+  }
+
+  const code = generateOtpCode();
+  const codeHash = hashOtpCode(code, normalizedEmail);
+  await createEmailVerification(normalizedEmail, codeHash);
+
+  try {
+    await getEmailProvider().sendVerificationCode({ to: normalizedEmail, code });
+  } catch (err) {
+    console.error(`[sendVerificationCodeAction] failed to send code to ${normalizedEmail}:`, err);
+    return { ok: false, error: "Couldn't send the verification email. Please try again in a moment." };
+  }
+
+  return { ok: true };
+}
+
+export interface VerifyEmailCodeResult {
+  ok: boolean;
+  error?: string;
+  /** Signed proof of verification — pass this straight through to `startSubmissionAction`. */
+  verificationToken?: string;
+}
+
+/**
+ * Checks a code entered by the contributor against the most recently
+ * issued one for `email`. On success, returns a signed short-lived
+ * `verificationToken` (see src/lib/auth/verification-token.ts) rather than
+ * just a boolean — `startSubmissionAction` re-validates that token itself
+ * rather than trusting the client's "it was right" claim, matching this
+ * codebase's existing "never trust the client alone" posture.
+ */
+export async function verifyEmailCodeAction(email: string, code: string): Promise<VerifyEmailCodeResult> {
+  const parsed = verifyEmailCodeSchema.safeParse({ email, code });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Enter the 6-digit code." };
+  }
+  const normalizedEmail = parsed.data.email.toLowerCase();
+
+  const hdrs = await headers();
+  const ip = clientIpFromHeaders(hdrs);
+  const ipLimit = checkRateLimit(`verify-otp-ip:${ip}`, { maxRequests: 30, windowSeconds: 3600 });
+  if (!ipLimit.allowed) {
+    return { ok: false, error: "Too many attempts from this network recently. Please try again later." };
+  }
+
+  const verification = await getLatestEmailVerification(normalizedEmail);
+  if (!verification) {
+    return { ok: false, error: "No verification code found for this email. Please request a new code." };
+  }
+  if (verification.verifiedAt) {
+    // Already verified by an earlier call (e.g. a duplicate click) — idempotent success.
+    return { ok: true, verificationToken: issueVerificationToken(normalizedEmail) };
+  }
+  if (verification.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "This code has expired. Please request a new one." };
+  }
+  if (verification.attempts >= MAX_VERIFY_ATTEMPTS) {
+    return { ok: false, error: "Too many incorrect attempts. Please request a new code." };
+  }
+
+  const matches = verifyOtpCode(parsed.data.code, normalizedEmail, verification.codeHash);
+  if (!matches) {
+    const attempts = await incrementVerificationAttempts(verification.id);
+    if (attempts >= MAX_VERIFY_ATTEMPTS) {
+      return { ok: false, error: "Too many incorrect attempts. Please request a new code." };
+    }
+    return { ok: false, error: "That code isn't right. Please check and try again." };
+  }
+
+  await markEmailVerified(verification.id);
+  return { ok: true, verificationToken: issueVerificationToken(normalizedEmail) };
+}
 
 export interface StartSubmissionResult {
   ok: boolean;
@@ -39,6 +158,7 @@ export interface StartSubmissionResult {
 export async function startSubmissionAction(
   campaignSlug: string,
   identity: ContributorIdentityInput,
+  verificationToken: string,
 ): Promise<StartSubmissionResult> {
   const hdrs = await headers();
   const ip = clientIpFromHeaders(hdrs);
@@ -50,6 +170,17 @@ export async function startSubmissionAction(
   const parsed = contributorIdentitySchema.safeParse(identity);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid identity information." };
+  }
+
+  // Re-validates the OTP-verification token itself rather than trusting
+  // that the client only reaches this action after a real
+  // `verifyEmailCodeAction` success — see verification-token.ts's header
+  // comment for why (the same "never trust the client's claim alone"
+  // principle as upload confirmation elsewhere in this codebase). Bound to
+  // this exact email, so a token minted for one address can't be replayed
+  // to start a submission under a different one.
+  if (!verifyVerificationToken(verificationToken, parsed.data.email)) {
+    return { ok: false, error: "Your email verification has expired or is invalid. Please verify your email again." };
   }
 
   const campaign = await getActiveCampaignBySlug(campaignSlug);

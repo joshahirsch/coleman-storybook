@@ -32,9 +32,9 @@ describe("contributorIdentitySchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("allows an empty email (email is optional)", () => {
+  it("rejects an empty email (required as of the email-OTP-verification feature, 2026-08-12 — see docs/security.md)", () => {
     const result = contributorIdentitySchema.safeParse({ ...base, email: "" });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it("rejects a malformed email", () => {

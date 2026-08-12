@@ -254,6 +254,36 @@ export const mediaAssets = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Email verification (OTP)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per one-time code sent to a contributor's email during the
+ * identity step (see docs/security.md and src/lib/auth/otp.ts). Not tied to
+ * a `contributors` row by foreign key — verification happens BEFORE a
+ * contributor/submission is created (that's the whole point: prove the
+ * email is real before we act on it), so this table is keyed on the raw
+ * email string instead. `codeHash` is an HMAC-SHA256 of the 6-digit code
+ * (never the plaintext code) so a database read alone can't recover a
+ * still-valid code, matching the project's existing "never store secrets
+ * recoverably" posture (bcrypt for admin passwords, HMAC-signed tokens for
+ * media URLs).
+ */
+export const emailVerifications = pgTable(
+  "email_verifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("email_verifications_email_idx").on(table.email)],
+);
+
+// ---------------------------------------------------------------------------
 // Consent
 // ---------------------------------------------------------------------------
 

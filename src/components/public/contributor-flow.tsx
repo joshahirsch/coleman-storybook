@@ -4,8 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   beginUploadAction,
   finalizeSubmissionAction,
+  sendVerificationCodeAction,
   startSubmissionAction,
   submitConsentAction,
+  verifyEmailCodeAction,
 } from "@/lib/actions/public-actions";
 import { uploadWithProgress } from "@/lib/upload-client";
 import { PERMITTED_USE_CLASSIFICATIONS, type PermittedUseClassification } from "@/lib/consent";
@@ -39,12 +41,15 @@ interface AnswerRecording {
 
 type Step =
   | "identity"
+  | "verify-email"
   | "consent"
   | "permissions"
   | "record"
   | "uploading"
   | "complete"
   | "unrecoverable-error";
+
+const OTP_RESEND_COOLDOWN_SECONDS = 30;
 
 const MAX_RETRY_ATTEMPTS = 2;
 
@@ -90,6 +95,13 @@ export function ContributorFlow({
   const [relationship, setRelationship] = useState<Relationship>("alumni_parent");
   const [yearsAssociated, setYearsAssociated] = useState("");
   const [isAdultConfirmed, setIsAdultConfirmed] = useState(false);
+
+  // Email verification (OTP) step state
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpResending, setOtpResending] = useState(false);
+  const [otpResendCooldown, setOtpResendCooldown] = useState(0);
 
   // Submission state (populated once identity step succeeds)
   const [submissionId, setSubmissionId] = useState<string | null>(null);
@@ -147,6 +159,13 @@ export function ContributorFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Ticks the "resend code" cooldown down to 0 once a code has just been (re)sent.
+  useEffect(() => {
+    if (otpResendCooldown <= 0) return;
+    const id = setInterval(() => setOtpResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [otpResendCooldown]);
+
   // Keep the live camera preview actually live.
   //
   // `videoPreviewRef` is shared by two DIFFERENT <video> elements: one on
@@ -186,29 +205,64 @@ export function ContributorFlow({
       setFormError("Please enter your first and last name.");
       return;
     }
+    if (!email.trim()) {
+      setFormError("Please enter your email — we'll send a verification code to it.");
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const result = await startSubmissionAction(campaignSlug, {
-        firstName,
-        lastName,
-        email,
-        relationship,
-        yearsAssociated,
-        roleInfo: "",
-        isAdult: true,
-      });
-      if (!result.ok || !result.submissionId) {
-        setFormError(result.error ?? "Something went wrong. Please try again.");
+      const result = await sendVerificationCodeAction(email);
+      if (!result.ok) {
+        setFormError(result.error ?? "Couldn't send the verification code. Please try again.");
         return;
       }
-      setSubmissionId(result.submissionId);
-      setConsentVersion(result.consentVersion ?? null);
-      setConsentText(result.consentText ?? null);
-      setMaxDurationSeconds(result.maxDurationSeconds ?? 180);
-      setAnswers(result.answers ?? []);
+      setOtpCode("");
+      setOtpError(null);
+      setOtpResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+      setStep("verify-email");
+    } catch (err) {
+      setFormError(describeSubmitError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /** Verifies the entered code, then immediately starts the submission with the resulting token — one contributor-facing action, even though it's two server round-trips under the hood. */
+  async function handleVerifyEmailSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setOtpError(null);
+
+    if (!/^\d{6}$/.test(otpCode.trim())) {
+      setOtpError("Enter the 6-digit code from your email.");
+      return;
+    }
+
+    setOtpVerifying(true);
+    try {
+      const verifyResult = await verifyEmailCodeAction(email, otpCode.trim());
+      if (!verifyResult.ok || !verifyResult.verificationToken) {
+        setOtpError(verifyResult.error ?? "That code isn't right. Please check and try again.");
+        return;
+      }
+
+      const startResult = await startSubmissionAction(
+        campaignSlug,
+        { firstName, lastName, email, relationship, yearsAssociated, roleInfo: "", isAdult: true },
+        verifyResult.verificationToken,
+      );
+      if (!startResult.ok || !startResult.submissionId) {
+        setOtpError(startResult.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+
+      setSubmissionId(startResult.submissionId);
+      setConsentVersion(startResult.consentVersion ?? null);
+      setConsentText(startResult.consentText ?? null);
+      setMaxDurationSeconds(startResult.maxDurationSeconds ?? 180);
+      setAnswers(startResult.answers ?? []);
       const initialRecordings: Record<string, AnswerRecording> = {};
-      for (const a of result.answers ?? []) {
+      for (const a of startResult.answers ?? []) {
         initialRecordings[a.id] = {
           blob: null,
           approved: false,
@@ -221,10 +275,34 @@ export function ContributorFlow({
       setRecordings(initialRecordings);
       setStep("consent");
     } catch (err) {
-      setFormError(describeSubmitError(err));
+      setOtpError(describeSubmitError(err));
     } finally {
-      setSubmitting(false);
+      setOtpVerifying(false);
     }
+  }
+
+  async function handleResendCode() {
+    if (otpResendCooldown > 0 || otpResending) return;
+    setOtpError(null);
+    setOtpResending(true);
+    try {
+      const result = await sendVerificationCodeAction(email);
+      if (!result.ok) {
+        setOtpError(result.error ?? "Couldn't resend the code. Please try again.");
+        return;
+      }
+      setOtpResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
+    } catch (err) {
+      setOtpError(describeSubmitError(err));
+    } finally {
+      setOtpResending(false);
+    }
+  }
+
+  function backToIdentityFromVerify() {
+    setOtpCode("");
+    setOtpError(null);
+    setStep("identity");
   }
 
   async function handleConsentSubmit() {
@@ -511,7 +589,7 @@ export function ContributorFlow({
   }
 
   const progressLabel = useMemo(() => {
-    const stepOrder: Step[] = ["identity", "consent", "permissions", "record", "uploading", "complete"];
+    const stepOrder: Step[] = ["identity", "verify-email", "consent", "permissions", "record", "uploading", "complete"];
     const idx = stepOrder.indexOf(step);
     return `Step ${Math.max(idx, 0) + 1} of ${stepOrder.length}`;
   }, [step]);
@@ -548,14 +626,18 @@ export function ContributorFlow({
             </label>
           </div>
           <label className="text-sm font-medium text-brand-secondary">
-            Email (optional)
+            Email
             <input
               type="email"
               className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-base"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              required
             />
+            <span className="mt-1 block text-xs font-normal text-brand-muted">
+              We&apos;ll send a 6-digit code to this address to confirm it&apos;s yours before you record.
+            </span>
           </label>
           <label className="text-sm font-medium text-brand-secondary">
             Your relationship to Coleman
@@ -602,8 +684,63 @@ export function ContributorFlow({
             disabled={submitting}
             className="mt-2 rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
           >
-            {submitting ? "Please wait…" : "Continue"}
+            {submitting ? "Sending code…" : "Continue"}
           </button>
+        </form>
+      )}
+
+      {step === "verify-email" && (
+        <form onSubmit={handleVerifyEmailSubmit} className="flex flex-col gap-4" noValidate>
+          <h1 className="font-heading text-2xl font-bold text-brand-secondary">Check your email</h1>
+          <p className="text-sm text-brand-muted">
+            We sent a 6-digit code to <span className="font-medium text-brand-secondary">{email}</span>. Enter it
+            below to continue.
+          </p>
+          <label className="text-sm font-medium text-brand-secondary">
+            Verification code
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-center text-lg tracking-[0.5em]"
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              required
+            />
+          </label>
+
+          {otpError && (
+            <p role="alert" className="text-sm font-medium text-red-700">
+              {otpError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={otpVerifying}
+            className="rounded-full bg-brand-primary px-6 py-3 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {otpVerifying ? "Verifying…" : "Verify & continue"}
+          </button>
+
+          <div className="flex items-center justify-between text-sm">
+            <button type="button" onClick={backToIdentityFromVerify} className="text-brand-secondary underline">
+              Change email
+            </button>
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={otpResendCooldown > 0 || otpResending}
+              className="text-brand-secondary underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
+            >
+              {otpResending
+                ? "Resending…"
+                : otpResendCooldown > 0
+                  ? `Resend code (${otpResendCooldown}s)`
+                  : "Resend code"}
+            </button>
+          </div>
         </form>
       )}
 
