@@ -43,3 +43,24 @@ export function buildSuggestedFilename(input: SuggestedFilenameInput): string {
   const last = slugifyNamePart(input.lastName) || "unknown";
   return `q${input.questionNumber}_${first}_${last}_${formatDateMMDDYYYY(input.date)}`;
 }
+
+export interface SubmissionFolderNameInput {
+  firstName: string;
+  lastName: string;
+  /** Submission date — same "when recorded, not exported" rule as `buildSuggestedFilename`. */
+  date: Date;
+}
+
+/**
+ * Builds the Drive subfolder name one submission's packaged videos are
+ * grouped under, e.g. "jane_smith_08122026" — same slugify/date rules as
+ * `buildSuggestedFilename`, just without the per-question `q#` prefix
+ * (owner decision, 2026-08-13: human-readable name + date, not the
+ * submission's opaque UUID, so the folder is easy to spot in Drive). See
+ * `src/lib/submission-packaging.ts`.
+ */
+export function buildSubmissionFolderName(input: SubmissionFolderNameInput): string {
+  const first = slugifyNamePart(input.firstName) || "unknown";
+  const last = slugifyNamePart(input.lastName) || "unknown";
+  return `${first}_${last}_${formatDateMMDDYYYY(input.date)}`;
+}

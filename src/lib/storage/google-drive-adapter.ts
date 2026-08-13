@@ -325,6 +325,108 @@ export async function appendRowToDriveCsvLog(
   return { ...result, created: false };
 }
 
+/**
+ * Finds a subfolder by exact name directly under the configured root
+ * folder, or creates it if missing. Used by `packageSubmissionVideos` (see
+ * src/lib/submission-packaging.ts) to group one submission's videos into
+ * their own folder — never used by the core upload/read/delete path, which
+ * always keeps the originals flat in the root folder (see this file's
+ * header comment on `key` doubling as the Drive file name; moving/renaming
+ * the originals would break `findFileByKey` for every other operation).
+ * Idempotent: safe to call more than once for the same folder name — a
+ * second call finds the folder created by the first rather than making a
+ * duplicate.
+ */
+export async function findOrCreateSubmissionFolder(folderName: string): Promise<{ id: string; created: boolean }> {
+  const rootFolderId = getRootFolderId();
+  const accessToken = await getAccessToken();
+
+  const q = `name = '${escapeQueryLiteral(folderName)}' and mimeType = 'application/vnd.google-apps.folder' and '${escapeQueryLiteral(rootFolderId)}' in parents and trashed = false`;
+  const listUrl = `${DRIVE_API}/files?${new URLSearchParams({ q, fields: "files(id,name)", pageSize: "1" })}`;
+  const listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!listRes.ok) {
+    const body = await listRes.text().catch(() => "");
+    throw new Error(
+      `Google Drive files.list failed (${listRes.status}) while looking up folder "${folderName}": ${body}`,
+    );
+  }
+  const listData = (await listRes.json()) as { files: { id: string; name: string }[] };
+  if (listData.files.length > 0) {
+    return { id: listData.files[0].id, created: false };
+  }
+
+  const createRes = await fetch(`${DRIVE_API}/files?fields=id`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json; charset=UTF-8" },
+    body: JSON.stringify({
+      name: folderName,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [rootFolderId],
+    }),
+  });
+  if (!createRes.ok) {
+    const body = await createRes.text().catch(() => "");
+    throw new Error(`Google Drive folder creation failed (${createRes.status}) for "${folderName}": ${body}`);
+  }
+  const created = (await createRes.json()) as { id: string };
+  return { id: created.id, created: true };
+}
+
+/**
+ * Copies one existing video (found by its storage `key`, same lookup
+ * `findFileByKey` uses) into `folderId` under `newName` — WITHOUT touching
+ * the original. The original stays exactly where it is (root folder,
+ * original opaque `key` name) so every other adapter operation
+ * (`getSignedReadUrl`'s read proxy, `confirmUpload`, `deleteObject`) keeps
+ * working unmodified; only a renamed duplicate is created. This is a
+ * deliberate copy-not-move — see the "Coleman Storybook — Video File Naming
+ * Convention" project doc's "option 1" (export/rename pass without touching
+ * the live app) — this is that option, automated.
+ *
+ * Idempotent per (folderId, newName): if a file with that exact name
+ * already exists in the target folder, skips re-copying rather than
+ * creating a duplicate, so re-running the packaging script for the same
+ * submission twice is safe.
+ */
+export async function copyVideoIntoFolder(
+  key: string,
+  newName: string,
+  folderId: string,
+): Promise<{ id: string; skipped: boolean }> {
+  const accessToken = await getAccessToken();
+
+  const existingQ = `name = '${escapeQueryLiteral(newName)}' and '${escapeQueryLiteral(folderId)}' in parents and trashed = false`;
+  const existingUrl = `${DRIVE_API}/files?${new URLSearchParams({ q: existingQ, fields: "files(id)", pageSize: "1" })}`;
+  const existingRes = await fetch(existingUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!existingRes.ok) {
+    const body = await existingRes.text().catch(() => "");
+    throw new Error(
+      `Google Drive files.list failed (${existingRes.status}) while checking for an existing copy named "${newName}": ${body}`,
+    );
+  }
+  const existingData = (await existingRes.json()) as { files: { id: string }[] };
+  if (existingData.files.length > 0) {
+    return { id: existingData.files[0].id, skipped: true };
+  }
+
+  const source = await findFileByKey(key);
+  if (!source) {
+    throw new Error(`Google Drive: source video not found for key "${key}" — cannot copy into folder "${folderId}".`);
+  }
+
+  const copyRes = await fetch(`${DRIVE_API}/files/${source.id}/copy?fields=id`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json; charset=UTF-8" },
+    body: JSON.stringify({ name: newName, parents: [folderId] }),
+  });
+  if (!copyRes.ok) {
+    const body = await copyRes.text().catch(() => "");
+    throw new Error(`Google Drive files.copy failed (${copyRes.status}) for key "${key}" -> "${newName}": ${body}`);
+  }
+  const copied = (await copyRes.json()) as { id: string };
+  return { id: copied.id, skipped: false };
+}
+
 export const googleDriveStorageAdapter: MediaStorageAdapter = {
   buildKey({ organizationSlug, submissionId, answerId, extension }) {
     const safeExt = extension.replace(/[^a-z0-9]/gi, "").slice(0, 10) || "bin";

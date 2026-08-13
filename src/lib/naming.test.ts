@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { slugifyNamePart, formatDateMMDDYYYY, buildSuggestedFilename } from "./naming";
+import { slugifyNamePart, formatDateMMDDYYYY, buildSuggestedFilename, buildSubmissionFolderName } from "./naming";
 
 describe("slugifyNamePart", () => {
   it("lowercases and strips spaces/punctuation", () => {
@@ -56,5 +56,34 @@ describe("buildSuggestedFilename", () => {
       date: new Date("2026-08-12T00:00:00.000Z"),
     });
     expect(name).toBe("q2_unknown_smith_08122026");
+  });
+});
+
+describe("buildSubmissionFolderName", () => {
+  it("builds firstname_lastname_MMDDYYYY, no q# prefix", () => {
+    const name = buildSubmissionFolderName({
+      firstName: "Jane",
+      lastName: "Smith",
+      date: new Date("2026-08-12T00:00:00.000Z"),
+    });
+    expect(name).toBe("jane_smith_08122026");
+  });
+
+  it("collapses multi-word names into single lowercase tokens, same as buildSuggestedFilename", () => {
+    const name = buildSubmissionFolderName({
+      firstName: "Mary Ann",
+      lastName: "O'Brien",
+      date: new Date("2026-08-12T00:00:00.000Z"),
+    });
+    expect(name).toBe("maryann_obrien_08122026");
+  });
+
+  it("falls back to 'unknown' if a name is empty/all-punctuation", () => {
+    const name = buildSubmissionFolderName({
+      firstName: "",
+      lastName: "Smith",
+      date: new Date("2026-08-12T00:00:00.000Z"),
+    });
+    expect(name).toBe("unknown_smith_08122026");
   });
 });

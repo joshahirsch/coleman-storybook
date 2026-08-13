@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { googleDriveStorageAdapter } from "./google-drive-adapter";
+import { googleDriveStorageAdapter, findOrCreateSubmissionFolder, copyVideoIntoFolder } from "./google-drive-adapter";
 
 /**
  * Only tests the parts of the adapter that don't require a live Google
@@ -77,6 +77,25 @@ describe("googleDriveStorageAdapter", () => {
     );
     await expect(googleDriveStorageAdapter.confirmUpload("some/key")).rejects.toThrow(/GOOGLE_DRIVE_CLIENT_ID/);
     await expect(googleDriveStorageAdapter.deleteObject("some/key")).rejects.toThrow(/GOOGLE_DRIVE_CLIENT_ID/);
+  });
+
+  it("findOrCreateSubmissionFolder fails closed when the root folder ID is missing, even before any network call", async () => {
+    process.env.GOOGLE_DRIVE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_DRIVE_CLIENT_SECRET = "test-client-secret";
+    process.env.GOOGLE_DRIVE_REFRESH_TOKEN = "test-refresh-token";
+    // GOOGLE_DRIVE_ROOT_FOLDER_ID intentionally left unset.
+    await expect(findOrCreateSubmissionFolder("jane_smith_08122026")).rejects.toThrow(
+      /GOOGLE_DRIVE_ROOT_FOLDER_ID/,
+    );
+  });
+
+  it("findOrCreateSubmissionFolder and copyVideoIntoFolder fail closed when OAuth credentials are missing", async () => {
+    process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID = "test-folder-id";
+    // Client ID/secret/refresh token intentionally left unset.
+    await expect(findOrCreateSubmissionFolder("jane_smith_08122026")).rejects.toThrow(/GOOGLE_DRIVE_CLIENT_ID/);
+    await expect(
+      copyVideoIntoFolder("some/key.webm", "q1_jane_smith_08122026.webm", "target-folder-id"),
+    ).rejects.toThrow(/GOOGLE_DRIVE_CLIENT_ID/);
   });
 
   it("getSignedReadUrl never touches the network — always returns our own proxy route", async () => {
