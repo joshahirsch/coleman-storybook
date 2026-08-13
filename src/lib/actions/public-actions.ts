@@ -33,6 +33,7 @@ import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate-limit";
 import { hashIp } from "@/lib/hash";
 import { logAuditEvent, trackAnalyticsEvent } from "@/lib/audit";
 import { exportContactCardsForSubmission } from "@/lib/contact-card-export";
+import { packageSubmissionVideos } from "@/lib/submission-packaging";
 import { generateOtpCode, hashOtpCode, verifyOtpCode } from "@/lib/auth/otp";
 import { issueVerificationToken, verifyVerificationToken } from "@/lib/auth/verification-token";
 import { getEmailProvider } from "@/lib/email";
@@ -355,6 +356,31 @@ export async function finalizeSubmissionAction(submissionId: string): Promise<Fi
       }
     } catch (err) {
       console.error(`[finalizeSubmissionAction] contact-card export threw for submission ${submissionId}:`, err);
+    }
+  }
+
+  // Best-effort: package this submission's videos into their own
+  // human-readable Drive subfolder, renamed per the adopted naming
+  // convention (see the "Coleman Storybook — Video File Naming Convention"
+  // project doc). Originally shipped as an on-demand-only admin action
+  // (`POST /api/admin/package-submission`, still available for backfilling
+  // older submissions); the owner then asked for it to also run
+  // automatically here — every new submission gets packaged with zero
+  // manual steps, same as the contact-card export above. Same
+  // never-blocks-the-submission reasoning as that export: a Drive hiccup in
+  // this enrichment step must never undo an already-confirmed set of
+  // uploads.
+  if (process.env.STORAGE_DRIVER === "drive") {
+    try {
+      const result = await packageSubmissionVideos(submissionId);
+      if (!result.ok) {
+        console.error(
+          `[finalizeSubmissionAction] video packaging did not fully succeed for submission ${submissionId}:`,
+          result.error ?? result.results.filter((r) => !r.ok),
+        );
+      }
+    } catch (err) {
+      console.error(`[finalizeSubmissionAction] video packaging threw for submission ${submissionId}:`, err);
     }
   }
 
