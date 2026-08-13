@@ -137,7 +137,7 @@ export interface SubmissionExportInfo {
     firstName: string;
     lastName: string;
     email: string | null;
-    relationship: string;
+    relationship: string[];
     yearsAssociated: string | null;
     roleInfo: string | null;
   };

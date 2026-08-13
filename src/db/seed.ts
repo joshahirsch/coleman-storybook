@@ -226,7 +226,7 @@ async function main() {
     campaign: { id: string; slug: string };
     first: string;
     last: string;
-    relationship: Relationship;
+    relationship: Relationship[];
     years: string;
     targetState: "SUBMITTED" | "READY_FOR_REVIEW" | "PROCESSING_FAILED";
     permittedUse: string;
@@ -386,7 +386,7 @@ async function main() {
     campaign: alumniCampaign,
     first: "Sarah",
     last: "Cohen",
-    relationship: "alumni_parent",
+    relationship: ["alumni_parent"],
     years: "Camper 1998–2005",
     targetState: "READY_FOR_REVIEW",
     permittedUse: "full_permitted_use",
@@ -396,7 +396,7 @@ async function main() {
     campaign: staffCampaign,
     first: "David",
     last: "Miller",
-    relationship: "staff",
+    relationship: ["staff"],
     years: "Staff 2010–2014",
     targetState: "READY_FOR_REVIEW",
     permittedUse: "website_and_social",
@@ -406,7 +406,7 @@ async function main() {
     campaign: parentsCampaign,
     first: "Rachel",
     last: "Stein",
-    relationship: "parent",
+    relationship: ["parent"],
     years: "Parent since 2021",
     targetState: "SUBMITTED",
     permittedUse: "internal_review_only",
@@ -416,7 +416,7 @@ async function main() {
     campaign: alumniCampaign,
     first: "Jordan",
     last: "Weiss",
-    relationship: "camper_staff",
+    relationship: ["camper_staff"],
     years: "Camper 2005–2011, Staff 2012–2015",
     targetState: "PROCESSING_FAILED",
     permittedUse: "full_permitted_use",

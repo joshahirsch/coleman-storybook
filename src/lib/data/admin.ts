@@ -6,12 +6,13 @@ import {
   contributors,
   mediaAssets,
   processingJobs,
+  relationshipEnum,
   storyAnalyses,
   submissionAnswers,
   submissions,
   transcripts,
 } from "@/db/schema";
-import { and, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, arrayContains, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 
 export interface SubmissionListFilters {
   campaignId?: string;
@@ -30,7 +31,8 @@ export interface SubmissionListRow {
   createdAt: Date;
   submittedAt: Date | null;
   contributorName: string;
-  relationship: string;
+  /** Contributor's full set of selected relationships to Coleman (multi-select as of 2026-08-13). */
+  relationship: string[];
   campaignTitle: string;
   campaignSlug: string;
   editorialState: string;
@@ -42,7 +44,14 @@ export async function listSubmissionsForAdmin(filters: SubmissionListFilters): P
   const conditions: SQL[] = [];
   if (filters.campaignId) conditions.push(eq(submissions.campaignId, filters.campaignId));
   if (filters.audience) {
-    conditions.push(eq(contributors.relationship, filters.audience as (typeof contributors.relationship.enumValues)[number]));
+    // `relationship` is now an array column (a contributor can select more
+    // than one relationship) — match submissions whose contributor's set
+    // *includes* the filtered audience, not an exact equality check.
+    conditions.push(
+      arrayContains(contributors.relationship, [
+        filters.audience as (typeof relationshipEnum.enumValues)[number],
+      ]),
+    );
   }
 
   if (filters.theme) {

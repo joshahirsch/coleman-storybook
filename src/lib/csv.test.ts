@@ -29,7 +29,7 @@ describe("buildContactLogRow", () => {
     firstName: "Jane",
     lastName: "Smith",
     email: "jane@example.com",
-    relationship: "alumni",
+    relationship: ["alumni_parent"],
     yearsAssociated: "2005-2009",
     roleInfo: "Camper",
     submissionDate: new Date("2026-08-12T14:30:00.000Z"),
@@ -42,8 +42,13 @@ describe("buildContactLogRow", () => {
     const cells = row.split(",");
     expect(cells).toHaveLength(CONTACT_LOG_HEADER.length);
     expect(row).toBe(
-      "q3_jane_smith_08122026,3,Jane,Smith,jane@example.com,alumni,2005-2009,Camper,2026-08-12,camp-coleman/sub-1/ans-1/abc123.webm,sub-1",
+      "q3_jane_smith_08122026,3,Jane,Smith,jane@example.com,alumni_parent,2005-2009,Camper,2026-08-12,camp-coleman/sub-1/ans-1/abc123.webm,sub-1",
     );
+  });
+
+  it("joins multiple relationship selections into one cell with a semicolon separator", () => {
+    const row = buildContactLogRow({ ...BASE_FIELDS, relationship: ["alumni_parent", "staff"] });
+    expect(row).toContain("alumni_parent; staff");
   });
 
   it("renders missing optional fields as empty cells rather than 'null'/'undefined'", () => {

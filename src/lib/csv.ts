@@ -41,7 +41,8 @@ export interface ContactLogRowFields {
   firstName: string;
   lastName: string;
   email?: string | null;
-  relationship?: string | null;
+  /** Contributor's selected relationship(s) to Coleman — multi-select as of 2026-08-13; joined into one cell below. */
+  relationship?: string[] | null;
   yearsAssociated?: string | null;
   roleInfo?: string | null;
   submissionDate: Date;
@@ -61,7 +62,10 @@ export function buildContactLogRow(fields: ContactLogRowFields): string {
     fields.firstName,
     fields.lastName,
     fields.email ?? "",
-    fields.relationship ?? "",
+    // Joined with "; " into a single cell — escapeCsvField below still
+    // quote-wraps correctly if a relationship label itself ever contained a
+    // comma, since it operates on the final joined string, not per-item.
+    fields.relationship && fields.relationship.length > 0 ? fields.relationship.join("; ") : "",
     fields.yearsAssociated ?? "",
     fields.roleInfo ?? "",
     isoDate(fields.submissionDate),

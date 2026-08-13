@@ -92,7 +92,12 @@ export function ContributorFlow({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [relationship, setRelationship] = useState<Relationship>("alumni_parent");
+  // Multi-select as of 2026-08-13 — a contributor can be e.g. both alumni
+  // and current staff, so this is checked options rather than one radio
+  // choice. Defaults to the campaign's primary audience pre-checked (same
+  // default this field always had as a single-select) so the common case
+  // still needs zero clicks; toggling adds/removes from the set.
+  const [relationship, setRelationship] = useState<Relationship[]>(["alumni_parent"]);
   const [yearsAssociated, setYearsAssociated] = useState("");
   const [isAdultConfirmed, setIsAdultConfirmed] = useState(false);
 
@@ -193,6 +198,10 @@ export function ContributorFlow({
     }
   }, [step, permissionState, recordingState, currentQuestionIndex]);
 
+  function toggleRelationship(value: Relationship) {
+    setRelationship((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  }
+
   async function handleIdentitySubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -207,6 +216,10 @@ export function ContributorFlow({
     }
     if (!email.trim()) {
       setFormError("Please enter your email — we'll send a verification code to it.");
+      return;
+    }
+    if (relationship.length === 0) {
+      setFormError("Please select at least one relationship to Coleman.");
       return;
     }
 
@@ -639,20 +652,22 @@ export function ContributorFlow({
               We&apos;ll send a 6-digit code to this address to confirm it&apos;s yours before you record.
             </span>
           </label>
-          <label className="text-sm font-medium text-brand-secondary">
-            Your relationship to Coleman
-            <select
-              className="mt-1 w-full rounded-md border border-brand-hairline px-3 py-2 text-base"
-              value={relationship}
-              onChange={(e) => setRelationship(e.target.value as Relationship)}
-            >
+          <fieldset>
+            <legend className="text-sm font-medium text-brand-secondary">Your relationship to Coleman</legend>
+            <p className="mt-1 text-xs font-normal text-brand-muted">Select all that apply.</p>
+            <div className="mt-2 flex flex-col gap-2">
               {RELATIONSHIP_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
+                <label key={opt.value} className="flex items-center gap-2 text-sm font-normal text-brand-secondary">
+                  <input
+                    type="checkbox"
+                    checked={relationship.includes(opt.value)}
+                    onChange={() => toggleRelationship(opt.value)}
+                  />
                   {opt.label}
-                </option>
+                </label>
               ))}
-            </select>
-          </label>
+            </div>
+          </fieldset>
           <label className="text-sm font-medium text-brand-secondary">
             Years associated with Coleman (optional)
             <input

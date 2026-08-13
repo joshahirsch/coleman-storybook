@@ -44,7 +44,8 @@ export default async function SubmissionDetailPage({ params }: { params: Promise
             )}
           </h1>
           <p className="text-sm text-gray-600">
-            {contributor?.relationship.replace(/_/g, " ")} · {contributor?.yearsAssociated ?? "years not provided"} ·{" "}
+            {contributor?.relationship.map((r) => r.replace(/_/g, " ")).join(", ")} ·{" "}
+            {contributor?.yearsAssociated ?? "years not provided"} ·{" "}
             {campaign?.title}
           </p>
           <p className="mt-1 text-xs text-gray-400">

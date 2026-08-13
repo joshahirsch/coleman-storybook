@@ -177,7 +177,9 @@ export default async function AdminDashboardPage({
                     <div className="font-medium text-gray-900">
                       {s.contributorName} {s.favorite && <span title="Favorited">★</span>}
                     </div>
-                    <div className="text-xs text-gray-600">{s.relationship.replace(/_/g, " ")}</div>
+                    <div className="text-xs text-gray-600">
+                      {s.relationship.map((r) => r.replace(/_/g, " ")).join(", ")}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{s.campaignTitle}</td>
                   <td className="px-4 py-3 text-gray-600">

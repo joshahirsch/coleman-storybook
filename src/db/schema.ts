@@ -189,7 +189,11 @@ export const contributors = pgTable("contributors", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email"),
-  relationship: relationshipEnum("relationship").notNull(),
+  // Array, not a single value — a contributor can be e.g. both an alumnus
+  // and a current staff member. Was a single scalar enum column before the
+  // multi-select relationship feature (2026-08-13); see the migration that
+  // introduced this for the backfill of existing single-value rows.
+  relationship: relationshipEnum("relationship").array().notNull(),
   yearsAssociated: text("years_associated"),
   roleInfo: text("role_info"),
   isSynthetic: boolean("is_synthetic").notNull().default(false),

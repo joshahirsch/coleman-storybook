@@ -1,0 +1,12 @@
+-- drizzle-kit's auto-generated USING clause here was
+-- `"relationship"::text::"public"."relationship"[]`, which is wrong: casting
+-- a scalar's text representation (e.g. "alumni_parent") directly to an array
+-- type asks Postgres to parse it as array literal syntax ("{...}"), not to
+-- wrap it in one -- that throws "malformed array literal" against any
+-- existing row. Wrapping the old scalar in ARRAY[...] first is what actually
+-- backfills every existing contributor's single relationship value into a
+-- one-element array, which is the intended migration semantics (see
+-- src/db/schema.ts's comment on `contributors.relationship` for why this
+-- column became an array in the first place -- the "Your relationship to
+-- Coleman" field supports selecting more than one).
+ALTER TABLE "contributors" ALTER COLUMN "relationship" SET DATA TYPE "public"."relationship"[] USING ARRAY["relationship"]::"public"."relationship"[];

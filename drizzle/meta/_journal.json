@@ -15,6 +15,13 @@
       "when": 1786541140022,
       "tag": "0001_add_email_verifications",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786624305237,
+      "tag": "0002_contributor_relationship_multi",
+      "breakpoints": true
     }
   ]
 }

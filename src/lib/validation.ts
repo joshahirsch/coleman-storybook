@@ -18,7 +18,13 @@ export const contributorIdentitySchema = z.object({
   // nothing trustworthy to log in the contact export CSV) without a real
   // email. See docs/security.md.
   email: z.string().trim().email("Enter a valid email").max(255),
-  relationship: z.enum(relationshipValues),
+  // Array — a contributor can select more than one relationship to Coleman
+  // (e.g. alumni AND current staff). Deduplicated defensively since the
+  // client sends checkbox state, not a database-backed set.
+  relationship: z
+    .array(z.enum(relationshipValues))
+    .min(1, "Select at least one relationship to Coleman")
+    .transform((values) => Array.from(new Set(values))),
   yearsAssociated: z.string().trim().max(100).optional().or(z.literal("")),
   roleInfo: z.string().trim().max(500).optional().or(z.literal("")),
   isAdult: z.literal(true, "Coleman Storybook is currently open to adult contributors only."),

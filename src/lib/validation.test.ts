@@ -6,7 +6,7 @@ describe("contributorIdentitySchema", () => {
     firstName: "Sarah",
     lastName: "Cohen",
     email: "sarah@example.test",
-    relationship: "alumni_parent" as const,
+    relationship: ["alumni_parent"] as const,
     yearsAssociated: "1998-2005",
     roleInfo: "",
     isAdult: true as const,
@@ -28,8 +28,29 @@ describe("contributorIdentitySchema", () => {
   });
 
   it("rejects an invalid relationship value (no free-text injection into the enum)", () => {
-    const result = contributorIdentitySchema.safeParse({ ...base, relationship: "camper; DROP TABLE" });
+    const result = contributorIdentitySchema.safeParse({ ...base, relationship: ["camper; DROP TABLE"] });
     expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty relationship selection (must pick at least one)", () => {
+    const result = contributorIdentitySchema.safeParse({ ...base, relationship: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts multiple relationship selections", () => {
+    const result = contributorIdentitySchema.safeParse({ ...base, relationship: ["alumni_parent", "staff"] });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.relationship).toEqual(["alumni_parent", "staff"]);
+    }
+  });
+
+  it("deduplicates repeated relationship selections", () => {
+    const result = contributorIdentitySchema.safeParse({ ...base, relationship: ["staff", "staff", "alumni_parent"] });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.relationship).toEqual(["staff", "alumni_parent"]);
+    }
   });
 
   it("rejects an empty email (required as of the email-OTP-verification feature, 2026-08-12 — see docs/security.md)", () => {
