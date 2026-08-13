@@ -71,6 +71,21 @@ function getRootFolderId(): string {
   return getEnv("GOOGLE_DRIVE_ROOT_FOLDER_ID");
 }
 
+/**
+ * Returns the app's own public origin (scheme + host, no trailing slash),
+ * used ONLY to set an `Origin` header on the resumable-upload-session-open
+ * request below — see that call site for why. Deliberately not reusing a
+ * shared "base URL" helper elsewhere in the codebase (there isn't one yet;
+ * `APP_BASE_URL` is otherwise just referenced directly where needed) —
+ * this one specifically needs an origin (no path), so it's kept local and
+ * narrow rather than introducing a general-purpose URL helper this file
+ * doesn't otherwise need.
+ */
+function getAppOrigin(): string {
+  const base = getEnv("APP_BASE_URL");
+  return base.replace(/\/+$/, "");
+}
+
 /** Escapes a value for safe interpolation into a Drive API `q` search string literal. */
 function escapeQueryLiteral(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -318,6 +333,21 @@ export const googleDriveStorageAdapter: MediaStorageAdapter = {
 
   async createUploadTarget(key, contentType): Promise<UploadTarget> {
     const rootFolderId = getRootFolderId();
+    // The browser PUTs the actual video bytes directly to the session URL
+    // Drive returns below (see file-level comment for why: avoiding
+    // Vercel's serverless request-body size cap). Drive only enables CORS
+    // on that follow-up browser PUT if the session-opening request below
+    // included an `Origin` header — confirmed against Google's Drive API
+    // CORS docs. Since that request runs server-to-server (Vercel calling
+    // Drive, not the browser calling Drive), there's no real browser
+    // Origin to forward, so we set one explicitly to the app's own public
+    // origin. Without this, every direct-upload PUT fails in the browser
+    // with a generic, hard-to-diagnose "blocked by CORS policy" error
+    // (confirmed live in production 2026-08-13 — every single upload
+    // failed until this header was added). Resolved up front, alongside
+    // the other config checks, so a missing APP_BASE_URL fails closed
+    // before spending a network round-trip on an OAuth token refresh.
+    const appOrigin = getAppOrigin();
     const accessToken = await getAccessToken();
     const res = await fetch(`${DRIVE_UPLOAD_API}/files?uploadType=resumable`, {
       method: "POST",
@@ -325,6 +355,7 @@ export const googleDriveStorageAdapter: MediaStorageAdapter = {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json; charset=UTF-8",
         "X-Upload-Content-Type": contentType,
+        Origin: appOrigin,
       },
       body: JSON.stringify({ name: key, parents: [rootFolderId] }),
     });

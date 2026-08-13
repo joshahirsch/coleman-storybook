@@ -16,6 +16,7 @@ describe("googleDriveStorageAdapter", () => {
     delete process.env.GOOGLE_DRIVE_CLIENT_SECRET;
     delete process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
     delete process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    delete process.env.APP_BASE_URL;
   });
 
   afterEach(() => {
@@ -53,8 +54,23 @@ describe("googleDriveStorageAdapter", () => {
     );
   });
 
+  it("fails closed (throws) when APP_BASE_URL is missing, before any network call — regression test for the 2026-08-13 CORS incident (see createUploadTarget's comment)", async () => {
+    process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID = "test-folder-id";
+    // APP_BASE_URL intentionally left unset. OAuth credentials also left
+    // unset — irrelevant here, since APP_BASE_URL is now resolved before
+    // the OAuth token fetch, so this must throw about APP_BASE_URL
+    // specifically, not about missing OAuth credentials.
+    await expect(googleDriveStorageAdapter.createUploadTarget("some/key", "video/webm")).rejects.toThrow(
+      /APP_BASE_URL/,
+    );
+  });
+
   it("fails closed (throws) when OAuth credentials are missing", async () => {
     process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID = "test-folder-id";
+    // APP_BASE_URL must be set here so createUploadTarget gets past its
+    // own config check and reaches the OAuth credential check this test
+    // is actually targeting — see the dedicated APP_BASE_URL test above.
+    process.env.APP_BASE_URL = "https://example.test";
     // Client ID/secret/refresh token intentionally left unset.
     await expect(googleDriveStorageAdapter.createUploadTarget("some/key", "video/webm")).rejects.toThrow(
       /GOOGLE_DRIVE_CLIENT_ID/,

@@ -66,6 +66,19 @@ export function validateRequiredEnv(): void {
     problems.push("DATABASE_URL is not set — see .env.example.");
   }
 
+  // Already documented as required regardless of storage driver
+  // (docs/deployment.md's env var table). Also now load-bearing for the
+  // Google Drive adapter's createUploadTarget() (see
+  // src/lib/storage/google-drive-adapter.ts), which needs it to set an
+  // Origin header when opening a resumable upload session — without it,
+  // Drive never enables CORS for the browser's follow-up direct-upload
+  // PUT, and every contributor video upload fails with a generic,
+  // confusing "Network error during upload" in the browser (confirmed in
+  // production 2026-08-13).
+  if (!process.env.APP_BASE_URL) {
+    problems.push("APP_BASE_URL is not set — see .env.example.");
+  }
+
   if (problems.length > 0) {
     console.error(
       "\n⚠️  Coleman Storybook: invalid environment configuration:\n" +
