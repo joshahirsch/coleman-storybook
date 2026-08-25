@@ -5,6 +5,7 @@ import {
   contributorIdentitySchema,
   consentAcceptanceSchema,
   sendVerificationCodeSchema,
+  suggestedQuestionSchema,
   verifyEmailCodeSchema,
   type ContributorIdentityInput,
 } from "@/lib/validation";
@@ -17,6 +18,7 @@ import {
   getSubmissionState,
   hasActiveConsent,
   recordConsent,
+  saveSuggestedQuestion,
   transitionSubmission,
 } from "@/lib/data/submissions";
 import {
@@ -389,4 +391,54 @@ export async function finalizeSubmissionAction(submissionId: string): Promise<Fi
 
 export async function hasConsentAction(submissionId: string): Promise<boolean> {
   return hasActiveConsent(submissionId);
+}
+
+export interface SuggestQuestionResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Saves a contributor's answer to "What should we ask Coleman people next?"
+ * from the completion screen.
+ *
+ * This used to be one of the recorded video questions; the owner moved it
+ * off-camera (2026-08-25) because it asks the contributor to think as a
+ * campaign planner rather than tell their own story — a different mode than
+ * the six prompts before it, and an awkward note to end a recording on.
+ *
+ * Runs strictly AFTER `finalizeSubmissionAction` has already succeeded, so
+ * nothing here may fail the submission: a bad id, a rate-limit trip, or a
+ * database hiccup returns an error the completion screen shows inline, and
+ * the contributor's story stays exactly as submitted either way. There is no
+ * state check on the submission for the same reason — the row is already
+ * READY_FOR_REVIEW by the time this screen renders, and re-submitting simply
+ * overwrites the previous suggestion.
+ *
+ * Rate-limited per-IP because this is an unauthenticated write reachable by
+ * anyone who can guess a submission UUID — same in-memory limiter, same
+ * documented single-process limitation, as the other public endpoints.
+ */
+export async function submitSuggestedQuestionAction(
+  submissionId: string,
+  suggestion: string,
+): Promise<SuggestQuestionResult> {
+  const parsed = suggestedQuestionSchema.safeParse({ submissionId, suggestion });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "That suggestion could not be saved." };
+  }
+
+  const ip = clientIpFromHeaders(await headers());
+  const limit = checkRateLimit(`suggest-question:${ip}`, { maxRequests: 10, windowSeconds: 600 });
+  if (!limit.allowed) {
+    return { ok: false, error: "Too many suggestions from this connection. Please try again later." };
+  }
+
+  const saved = await saveSuggestedQuestion(parsed.data.submissionId, parsed.data.suggestion);
+  if (!saved) {
+    return { ok: false, error: "That suggestion could not be saved." };
+  }
+
+  await trackAnalyticsEvent({ eventType: "suggested_question_submitted", submissionId: parsed.data.submissionId });
+  return { ok: true };
 }

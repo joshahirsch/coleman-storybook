@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { contributorIdentitySchema, consentAcceptanceSchema, uploadInitSchema, MEDIA_CONSTRAINTS } from "./validation";
+import {
+  contributorIdentitySchema,
+  consentAcceptanceSchema,
+  suggestedQuestionSchema,
+  uploadInitSchema,
+  MEDIA_CONSTRAINTS,
+} from "./validation";
 
 describe("contributorIdentitySchema", () => {
   const base = {
@@ -107,5 +113,37 @@ describe("uploadInitSchema / MEDIA_CONSTRAINTS", () => {
 
   it("MEDIA_CONSTRAINTS.maxBytes matches the schema's hard cap", () => {
     expect(MEDIA_CONSTRAINTS.maxBytes).toBe(500 * 1024 * 1024);
+  });
+});
+
+describe("suggestedQuestionSchema", () => {
+  // A real v4 UUID: zod's .uuid() enforces the RFC version/variant bits, and
+  // Postgres gen_random_uuid() (what actually mints submission ids) emits v4.
+  const id = "0063e3b9-a15b-43a7-ac23-321117f87afd";
+
+  it("accepts a normal suggestion and trims surrounding whitespace", () => {
+    const result = suggestedQuestionSchema.safeParse({
+      submissionId: id,
+      suggestion: "   What song do you still associate with camp?  ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.suggestion).toBe("What song do you still associate with camp?");
+    }
+  });
+
+  it("rejects a whitespace-only suggestion rather than storing an empty row", () => {
+    const result = suggestedQuestionSchema.safeParse({ submissionId: id, suggestion: "     " });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a suggestion longer than the 1000-character cap", () => {
+    const result = suggestedQuestionSchema.safeParse({ submissionId: id, suggestion: "a".repeat(1001) });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-uuid submission id", () => {
+    const result = suggestedQuestionSchema.safeParse({ submissionId: "not-a-uuid", suggestion: "Ask about food." });
+    expect(result.success).toBe(false);
   });
 });

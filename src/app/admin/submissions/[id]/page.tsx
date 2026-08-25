@@ -93,6 +93,18 @@ export default async function SubmissionDetailPage({ params }: { params: Promise
             </div>
           </section>
 
+          {submission.suggestedQuestion && (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold text-gray-900">Suggested next question</h2>
+              <div className="rounded-md border border-gray-200 p-4">
+                <p className="mb-2 text-xs text-gray-500">
+                  Typed by the contributor on the completion screen, after submitting — not a recorded answer.
+                </p>
+                <p className="whitespace-pre-wrap text-sm text-gray-900">{submission.suggestedQuestion}</p>
+              </div>
+            </section>
+          )}
+
           <section>
             <h2 className="mb-2 text-sm font-semibold text-gray-900">Story intelligence (AI-assisted)</h2>
             {analysis ? (

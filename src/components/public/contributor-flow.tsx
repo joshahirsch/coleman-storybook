@@ -7,6 +7,7 @@ import {
   sendVerificationCodeAction,
   startSubmissionAction,
   submitConsentAction,
+  submitSuggestedQuestionAction,
   verifyEmailCodeAction,
 } from "@/lib/actions/public-actions";
 import { uploadWithProgress } from "@/lib/upload-client";
@@ -140,6 +141,37 @@ export function ContributorFlow({
   // Upload step state
   const [uploadOverallError, setUploadOverallError] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
+
+  // Completion step state -- the optional "what should we ask next?" box.
+  // Everything here is post-submission: the story is already saved by the
+  // time this screen renders, so none of this can affect it.
+  const [suggestion, setSuggestion] = useState("");
+  const [suggestionState, setSuggestionState] = useState<"idle" | "saving" | "saved">("idle");
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
+
+  async function submitSuggestion() {
+    if (!submissionId || suggestionState === "saving") return;
+    const trimmed = suggestion.trim();
+    if (!trimmed) {
+      setSuggestionError("Type a question first.");
+      return;
+    }
+    setSuggestionError(null);
+    setSuggestionState("saving");
+    try {
+      const result = await submitSuggestedQuestionAction(submissionId, trimmed);
+      if (result.ok) {
+        setSuggestionState("saved");
+      } else {
+        setSuggestionState("idle");
+        setSuggestionError(result.error ?? "That could not be saved. Please try again.");
+      }
+    } catch {
+      // Never surfaces as a failed submission -- the story is already saved.
+      setSuggestionState("idle");
+      setSuggestionError("That could not be saved. Please try again.");
+    }
+  }
 
   const currentQuestion = answers[currentQuestionIndex] as AnswerPrompt | undefined;
 
@@ -976,6 +1008,53 @@ export function ContributorFlow({
             Your recording has been saved and will be reviewed by the Coleman Storybook team before it&apos;s used
             anywhere. You&apos;re all done here — feel free to close this page.
           </p>
+
+          {/*
+            "What should we ask Coleman people next?" — moved here from the
+            recorded question set (owner decision, 2026-08-25). Entirely
+            optional and entirely post-submission: the story is already
+            saved and finalized before this screen renders, so a failure
+            here shows inline and changes nothing about the submission.
+          */}
+          <div className="mt-2 w-full max-w-md rounded-md border border-brand-hairline bg-brand-surface p-4 text-left">
+            <label htmlFor="suggested-question" className="font-heading text-base font-bold text-brand-secondary">
+              One more thing, if you have a minute
+            </label>
+            <p className="mt-1 text-sm text-brand-muted">
+              What should we ask Coleman people next? We read every suggestion.
+            </p>
+
+            {suggestionState === "saved" ? (
+              <p role="status" className="mt-3 text-sm font-medium text-brand-secondary">
+                Got it — thank you. That goes straight to the Coleman Storybook team.
+              </p>
+            ) : (
+              <>
+                <textarea
+                  id="suggested-question"
+                  value={suggestion}
+                  onChange={(e) => setSuggestion(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="A question you wish we had asked…"
+                  className="mt-3 w-full rounded-md border border-brand-hairline bg-white p-2 text-sm text-brand-secondary"
+                />
+                {suggestionError && (
+                  <p role="alert" className="mt-2 text-sm text-red-700">
+                    {suggestionError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={submitSuggestion}
+                  disabled={suggestionState === "saving"}
+                  className="mt-3 rounded-full bg-brand-primary px-5 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {suggestionState === "saving" ? "Sending…" : "Send suggestion"}
+                </button>
+              </>
+            )}
+          </div>
 
           {/*
             Deliberately a plain <a>, not next/link's <Link>: this page IS

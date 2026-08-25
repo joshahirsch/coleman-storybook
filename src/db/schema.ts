@@ -215,6 +215,14 @@ export const submissions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    // Optional free-text answer to "What should we ask Coleman people next?",
+    // collected on the completion screen AFTER the submission is finalized —
+    // deliberately not one of the recorded questions (owner decision,
+    // 2026-08-25): it's a suggestion box for the campaign, not part of the
+    // contributor's story, so it must never gate or delay finalize. Nullable
+    // for every submission that predates it and every contributor who skips
+    // it, which is expected to be most of them.
+    suggestedQuestion: text("suggested_question"),
   },
   (table) => [
     index("submissions_campaign_idx").on(table.campaignId),

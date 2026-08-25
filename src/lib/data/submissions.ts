@@ -115,6 +115,24 @@ export async function getSubmissionAnswersWithMedia(submissionId: string) {
   return results;
 }
 
+/**
+ * Store (or replace) a contributor's answer to the completion screen's
+ * "What should we ask Coleman people next?" prompt.
+ *
+ * Returns false when no submission matched — the completion screen is a
+ * client component holding `submissionId` in local state, so a stale or
+ * tampered id must be a quiet no-op rather than a thrown error on a page
+ * whose whole job is to tell the contributor they're finished.
+ */
+export async function saveSuggestedQuestion(submissionId: string, suggestion: string): Promise<boolean> {
+  const updated = await db
+    .update(submissions)
+    .set({ suggestedQuestion: suggestion })
+    .where(eq(submissions.id, submissionId))
+    .returning({ id: submissions.id });
+  return updated.length > 0;
+}
+
 /** True once every answer for the submission has at least one confirmed media asset. */
 export async function allAnswersHaveConfirmedMedia(submissionId: string): Promise<boolean> {
   const answers = await getSubmissionAnswersWithMedia(submissionId);

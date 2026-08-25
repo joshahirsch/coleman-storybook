@@ -59,6 +59,18 @@ const ORG = {
   contactEmail: "info@campcoleman.org",
 };
 
+/**
+ * The final alumni prompt is not a question -- every contributor reads the
+ * same line to camera so the takes can be cut together into one Storybook
+ * promo. The line itself is the prompt (it has to be the big, readable text
+ * on screen -- someone is reading it aloud), and the instruction sits in the
+ * help text underneath. The website/CTA is deliberately NOT spoken: that gets
+ * added as an on-screen graphic in the edit, so nobody has to recite a URL.
+ */
+const PROMO_LINE_PROMPT = "\u201CWe told you ours. Now tell us yours. Share your Coleman story.\u201D";
+const PROMO_LINE_HELP =
+  "Last one, and it's the same for everyone. Read that line out loud, straight to camera — that's the whole thing. No need to say a website; we add that on screen afterward.";
+
 const CAMPAIGNS: Array<{
   slug: string;
   title: string;
@@ -84,13 +96,24 @@ const CAMPAIGNS: Array<{
     completionCopy: "Todah rabah — thank you for sharing your Coleman story with us.",
     tags: ["alumni"],
     activateByDefault: true,
+    // Question set refreshed 2026-08-25 (owner). Three prompts were retired
+    // ("What did Coleman give you that you did not realize at the time?",
+    // "How did Coleman influence who you became?", "What would you tell
+    // someone considering Coleman today?"), one was softened ("who changed
+    // your life?" -> "that you still think about"), and the last slot became
+    // a scripted line every contributor reads to camera so the clips can be
+    // cut together into a single Storybook promo. In the LIVE database the
+    // retired rows were deactivated rather than deleted, so already-recorded
+    // answers stay attached to the exact wording their contributor was asked
+    // -- this array only describes what a FRESH bootstrap should create.
     questions: [
       "Tell us your name and when you were at Coleman.",
+      "What's something only a Coleman person would understand?",
+      "If you could go back to Coleman for one hour, where would you go first — and who are you bringing?",
+      "Who did you meet at Coleman that you still think about — and why?",
+      "Finish this sentence: \u201CYou know you went to Coleman if\u2026\u201D",
       "What Coleman memory still makes you smile?",
-      "Who did you meet at Coleman who changed your life?",
-      "What did Coleman give you that you did not realize at the time?",
-      "How did Coleman influence who you became?",
-      "What would you tell someone considering Coleman today?",
+      PROMO_LINE_PROMPT,
     ],
   },
   {
@@ -189,6 +212,9 @@ async function main() {
       c.questions.map((promptText, order) => ({
         campaignId: campaign.id,
         promptText,
+        // Only the scripted promo line carries help text today; every other
+        // prompt is self-explanatory and renders cleaner without it.
+        helpText: promptText === PROMO_LINE_PROMPT ? PROMO_LINE_HELP : null,
         order,
       })),
     );

@@ -84,3 +84,15 @@ export const MEDIA_CONSTRAINTS = {
   maxBytes: 500 * 1024 * 1024,
   maxDurationSecondsHardCap: 600,
 };
+
+/**
+ * Optional "What should we ask Coleman people next?" suggestion, collected on
+ * the completion screen. Capped well below the DB's unbounded `text` column so
+ * a paste-bomb can't be stored; an all-whitespace value trims to "" and is
+ * rejected here rather than saved as an empty row.
+ */
+export const suggestedQuestionSchema = z.object({
+  submissionId: z.string().uuid(),
+  suggestion: z.string().trim().min(1, "Type a question first.").max(1000),
+});
+export type SuggestedQuestionInput = z.infer<typeof suggestedQuestionSchema>;
